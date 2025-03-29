@@ -34,17 +34,19 @@ class TetrisPyBoyEnv(gym.Env):
         None,
     ]
     
-    def __init__(self, rom_path="tetris.gb", render_mode="human"):
+    def __init__(self, rom_path="tetris.gb", render_mode="human", turn_based=True):
         super(TetrisPyBoyEnv, self).__init__()
         
         self.rom_path = rom_path
         self.render_mode = render_mode
+        self.turn_based = turn_based  # Turn-based mode flag
         self.pyboy = None
         self.tetris = None
         self.prev_score = 0
         self.prev_lines = 0
         self.frame_count = 0
         self.max_frames_per_episode = 10000  # Limit episode length
+        self.piece_locked = False  # Flag to track if the current piece has locked in place
         
         self.action_space = spaces.Discrete(len(self.ACTIONS))
         
@@ -138,9 +140,27 @@ class TetrisPyBoyEnv(gym.Env):
         except Exception as e:
             print(f"Failed to save game over screenshot: {e}")
     
+    def _is_piece_locked(self):
+        """Check if the current piece has locked in place."""
+        board_before = self._get_observation()['board'].copy()
+        
+        self.pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
+        self.pyboy.tick()
+        self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
+        
+        for _ in range(3):
+            self.pyboy.tick()
+        
+        board_after = self._get_observation()['board'].copy()
+        
+        return np.array_equal(board_before, board_after)
+    
     def step(self, action):
         """
         Execute one time step within the environment.
+        
+        In turn-based mode, each step represents a complete piece placement,
+        from spawn to lock. In continuous mode, each step is a single action.
         
         Args:
             action: An integer representing the action to take
@@ -162,13 +182,35 @@ class TetrisPyBoyEnv(gym.Env):
             self.pyboy.send_input(self.ACTIONS[action])
             self.pyboy.tick()
             self.pyboy.send_input(self.RELEASE_ACTIONS[action])
-        
-        for _ in range(5):
-            self.pyboy.tick()
             self.frame_count += 1
         
-        observation = self._get_observation()
+        if self.turn_based:
+            piece_locked = False
+            max_frames_per_piece = 100  # Safety limit to prevent infinite loops
+            frames_since_action = 0
+            
+            while not piece_locked and frames_since_action < max_frames_per_piece:
+                for _ in range(3):
+                    self.pyboy.tick()
+                    self.frame_count += 1
+                
+                frames_since_action += 3
+                
+                piece_locked = self._is_piece_locked()
+                
+                if frames_since_action > 50 and frames_since_action % 10 == 0:
+                    self.pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
+                    self.pyboy.tick()
+                    self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
+                    self.frame_count += 1
+            
+            print(f"Piece locked after {frames_since_action} frames")
+        else:
+            for _ in range(5):
+                self.pyboy.tick()
+                self.frame_count += 1
         
+        observation = self._get_observation()
         reward = self._calculate_reward()
         
         terminated = self._is_game_over()
@@ -178,7 +220,8 @@ class TetrisPyBoyEnv(gym.Env):
             'score': self.tetris.score,
             'lines': self.tetris.lines,
             'level': self.tetris.level,
-            'frame_count': self.frame_count
+            'frame_count': self.frame_count,
+            'turn_based': self.turn_based
         }
         
         print(f"Frame {self.frame_count}: Score={info['score']}, Lines={info['lines']}, Reward={reward:.2f}")
@@ -198,7 +241,8 @@ class TetrisPyBoyEnv(gym.Env):
         
         Args:
             seed: Random seed for reproducibility
-            options: Additional options for reset
+            options: Additional options for reset. Can include:
+                - turn_based: Override the default turn-based setting
             
         Returns:
             observation: The initial state of the game
@@ -206,13 +250,20 @@ class TetrisPyBoyEnv(gym.Env):
         """
         super().reset(seed=seed)
         
+        if options is not None:
+            if 'turn_based' in options:
+                self.turn_based = options['turn_based']
+        
         if self.pyboy is not None:
             self.pyboy.stop()
         
         window = "SDL2" if self.render_mode == "human" else "null"
         self.pyboy = PyBoy(self.rom_path, window=window, scale=3)
         
-        self.pyboy.set_emulation_speed(0)
+        if self.turn_based:
+            self.pyboy.set_emulation_speed(0)
+        else:
+            self.pyboy.set_emulation_speed(4)
         
         if self.pyboy.cartridge_title != "TETRIS":
             self.pyboy.stop()
@@ -228,6 +279,7 @@ class TetrisPyBoyEnv(gym.Env):
         self.prev_score = 0
         self.prev_lines = 0
         self.frame_count = 0
+        self.piece_locked = False
         
         observation = self._get_observation()
         
@@ -235,7 +287,8 @@ class TetrisPyBoyEnv(gym.Env):
             'score': self.tetris.score,
             'lines': self.tetris.lines,
             'level': self.tetris.level,
-            'frame_count': self.frame_count
+            'frame_count': self.frame_count,
+            'turn_based': self.turn_based
         }
         
         return observation, info
