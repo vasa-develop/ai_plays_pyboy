@@ -50,7 +50,7 @@ class ZeldaEvalCallback(BaseCallback):
             episode_lengths = []
             
             for i in range(self.n_eval_episodes):
-                obs, _ = self.eval_env.reset()
+                obs = self.eval_env.reset()
                 done = False
                 truncated = False
                 episode_reward = 0
@@ -348,7 +348,7 @@ class ZeldaRLAgent:
         episode_rewards = []
         
         for i in range(episodes):
-            obs, _ = self.env.reset()
+            obs = self.env.reset()
             done = False
             truncated = False
             episode_reward = 0
