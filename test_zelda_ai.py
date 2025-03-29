@@ -51,6 +51,8 @@ def test_zelda_ai():
             logger.info("Taking random actions...")
             for i in range(100):
                 action = env.action_space.sample()
+                if isinstance(action, (int, np.integer)):
+                    action = [action]  # Wrap scalar action in list for vectorized env
                 step_result = env.step(action)
                 
                 if len(step_result) == 4:
@@ -87,11 +89,34 @@ def test_zelda_ai():
             env = create_zelda_env(args.rom, render_mode="human")
             
             total_reward = 0
-            obs, info = env.reset()
+            reset_result = env.reset()
+            if isinstance(reset_result, tuple) and len(reset_result) == 2:
+                obs, info = reset_result
+            else:
+                obs = reset_result
+                info = {}
             
             for i in range(1000):
                 action = env.action_space.sample()
-                obs, reward, done, truncated, info = env.step(action)
+                if isinstance(action, (int, np.integer)):
+                    action = [action]  # Wrap scalar action in list for vectorized env
+                
+                step_result = env.step(action)
+                if len(step_result) == 4:
+                    obs, reward, done, info = step_result
+                    truncated = False
+                elif len(step_result) == 5:
+                    obs, reward, done, truncated, info = step_result
+                else:
+                    logger.error(f"Unexpected step result format: {step_result}")
+                    break
+                
+                if isinstance(reward, (list, np.ndarray)):
+                    reward = reward[0]
+                if isinstance(done, (list, np.ndarray)):
+                    done = done[0]
+                if isinstance(truncated, (list, np.ndarray)):
+                    truncated = truncated[0]
                 total_reward += reward
                 
                 if i % 100 == 0:
