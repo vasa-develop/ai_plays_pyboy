@@ -347,7 +347,7 @@ class TetrisEvalCallback(BaseCallback):
         
         return True
 
-def create_tetris_env(rom_path, render_mode="human", adaptive_reward=True):
+def create_tetris_env(rom_path, render_mode="human", adaptive_reward=True, turn_based=True):
     """
     Create a Tetris environment with all necessary wrappers.
     
@@ -355,11 +355,12 @@ def create_tetris_env(rom_path, render_mode="human", adaptive_reward=True):
         rom_path: Path to the Tetris ROM file
         render_mode: Whether to render the game visually
         adaptive_reward: Whether to use the adaptive reward function
+        turn_based: Whether to use turn-based gameplay mode
         
     Returns:
         Vectorized environment ready for RL training
     """
-    base_env = TetrisPyBoyEnv(rom_path=rom_path, render_mode=render_mode)
+    base_env = TetrisPyBoyEnv(rom_path=rom_path, render_mode=render_mode, turn_based=turn_based)
     
     feature_env = TetrisFeatureWrapper(base_env)
     enhanced_env = TetrisRewardWrapper(feature_env, adaptive=adaptive_reward)
