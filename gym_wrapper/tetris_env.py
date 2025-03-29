@@ -175,20 +175,35 @@ class TetrisPyBoyEnv(gym.Env):
     def _is_piece_locked(self):
         """Check if the current piece has locked in place."""
         try:
+            print("[PIECE_LOCK] Checking if piece is locked...")
             board_before = self._get_observation()['board'].copy()
+            board_sum_before = np.sum(board_before)
+            print(f"[PIECE_LOCK] Board state before: {board_sum_before} filled cells")
             
+            print("[PIECE_LOCK] Sending down input to test piece movement")
             self.pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
             self.pyboy.tick()
             self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
             
-            for _ in range(3):
+            print("[PIECE_LOCK] Waiting for game to process movement")
+            for i in range(3):
                 self.pyboy.tick()
+                print(f"[PIECE_LOCK] Tick {i+1}/3")
             
             board_after = self._get_observation()['board'].copy()
+            board_sum_after = np.sum(board_after)
+            print(f"[PIECE_LOCK] Board state after: {board_sum_after} filled cells")
             
-            return np.array_equal(board_before, board_after)
+            is_locked = np.array_equal(board_before, board_after)
+            print(f"[PIECE_LOCK] Piece locked: {is_locked}")
+            
+            if board_sum_after > board_sum_before:
+                print("[PIECE_LOCK] Board has more filled cells, piece likely merged with board")
+                return True
+                
+            return is_locked
         except Exception as e:
-            print(f"Warning: Error checking if piece is locked: {e}")
+            print(f"[PIECE_LOCK] Error checking if piece is locked: {e}")
             return True
     
     def step(self, action):
@@ -220,19 +235,23 @@ class TetrisPyBoyEnv(gym.Env):
         print(f"Frame {self.frame_count}: Taking action {action_name}")
         
         if self.turn_based:
-            print(f"[TURN-BASED] Starting new piece placement")
+            print(f"[TURN-BASED] Starting new piece placement with action: {action_name}")
             
         if self.ACTIONS[action] is not None:
+            print(f"[ACTION] Sending input: {action_name}")
             self.pyboy.send_input(self.ACTIONS[action])
             self.pyboy.tick()
             self.pyboy.send_input(self.RELEASE_ACTIONS[action])
             self.frame_count += 1
+        else:
+            print("[ACTION] No input sent (None action)")
         
         if self.turn_based:
             piece_locked = False
             max_frames_per_piece = 100  # Safety limit to prevent infinite loops
             frames_since_action = 0
             
+            print("[TURN-BASED] Waiting for piece to lock...")
             while not piece_locked and frames_since_action < max_frames_per_piece:
                 for _ in range(3):
                     self.pyboy.tick()
@@ -240,15 +259,22 @@ class TetrisPyBoyEnv(gym.Env):
                 
                 frames_since_action += 3
                 
+                if frames_since_action % 15 == 0:
+                    print(f"[TURN-BASED] Waited {frames_since_action} frames, checking if piece locked...")
+                
                 piece_locked = self._is_piece_locked()
                 
                 if frames_since_action > 50 and frames_since_action % 10 == 0:
+                    print("[TURN-BASED] Piece taking too long, sending down input to accelerate")
                     self.pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
                     self.pyboy.tick()
                     self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
                     self.frame_count += 1
             
-            print(f"Piece locked after {frames_since_action} frames")
+            if piece_locked:
+                print(f"[TURN-BASED] Piece locked successfully after {frames_since_action} frames")
+            else:
+                print(f"[TURN-BASED] Piece lock timeout after {frames_since_action} frames")
         else:
             for _ in range(5):
                 self.pyboy.tick()
@@ -305,9 +331,13 @@ class TetrisPyBoyEnv(gym.Env):
         self.pyboy = PyBoy(self.rom_path, window=window, scale=3)
         
         if self.turn_based:
+            print("[TURN-BASED] Activating turn-based mode")
             self.pyboy.set_emulation_speed(0)
+            print("[TURN-BASED] Emulation speed set to 0 (manual stepping)")
         else:
+            print("[CONTINUOUS] Using continuous mode")
             self.pyboy.set_emulation_speed(4)
+            print("[CONTINUOUS] Emulation speed set to 4")
         
         if not self.pyboy.cartridge_title or "TETRIS" not in self.pyboy.cartridge_title.upper():
             print(f"Warning: ROM title '{self.pyboy.cartridge_title}' may not be Tetris, but continuing anyway")
