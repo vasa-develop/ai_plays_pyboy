@@ -211,6 +211,11 @@ class TetrisPyBoyEnv(gym.Env):
         if self.pyboy is None:
             raise RuntimeError("Environment not initialized. Call reset() first.")
         
+        if self.turn_based and np.random.random() < 0.3:  # 30% chance of random action
+            original_action = action
+            action = np.random.randint(0, self.action_space.n)
+            print(f"[EXPLORATION] Replacing action {original_action} with random action {action}")
+        
         action_name = "None" if action == 6 else str(self.ACTIONS[action]).split('.')[-1]
         print(f"Frame {self.frame_count}: Taking action {action_name}")
         
