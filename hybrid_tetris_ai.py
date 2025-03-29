@@ -10,6 +10,7 @@ from gym_wrapper import TetrisPyBoyEnv
 from state_preprocessor import TetrisStatePreprocessor
 from custom_wrappers import TetrisFeatureWrapper, TetrisRewardWrapper, VecTetrisFeatureWrapper
 from reward_function import TetrisRewardFunction, AdaptiveRewardFunction
+from rl_agent import TetrisRLAgent, create_tetris_env
 
 class TetrisHybridAI:
     """
@@ -17,7 +18,7 @@ class TetrisHybridAI:
     Combines game wrapper direct access with reinforcement learning.
     """
     
-    def __init__(self, rom_path="tetris.gb", model_path=None, render_mode="human"):
+    def __init__(self, rom_path="tetris.gb", model_path=None, render_mode="human", algorithm="ppo"):
         """
         Initialize the Tetris Hybrid AI.
         
@@ -25,14 +26,17 @@ class TetrisHybridAI:
             rom_path: Path to the Tetris ROM file
             model_path: Path to a pre-trained model (if available)
             render_mode: Whether to render the game visually
+            algorithm: RL algorithm to use ('ppo', 'a2c', or 'dqn')
         """
         self.logger = logging.getLogger(__name__)
         self.rom_path = rom_path
         self.model_path = model_path
         self.render_mode = render_mode
+        self.algorithm = algorithm
         self.env = None
         self.model = None
         self.state_preprocessor = TetrisStatePreprocessor()
+        self.rl_agent = None
         
     def create_environment(self):
         """Create and initialize the Tetris environment."""
@@ -40,14 +44,7 @@ class TetrisHybridAI:
             self.logger.error(f"ROM file not found: {self.rom_path}")
             raise FileNotFoundError(f"ROM file not found: {self.rom_path}")
         
-        base_env = TetrisPyBoyEnv(rom_path=self.rom_path, render_mode=self.render_mode)
-        
-        feature_env = TetrisFeatureWrapper(base_env)
-        enhanced_env = TetrisRewardWrapper(feature_env)
-        
-        self.env = DummyVecEnv([lambda: enhanced_env])
-        
-        self.env = VecTetrisFeatureWrapper(self.env)
+        self.env = create_tetris_env(self.rom_path, self.render_mode)
         
         self.logger.info("Tetris environment with feature extraction created successfully")
         
@@ -56,24 +53,17 @@ class TetrisHybridAI:
         if self.env is None:
             self.create_environment()
         
-        if self.model_path and os.path.exists(self.model_path):
-            self.logger.info(f"Loading model from {self.model_path}")
-            self.model = PPO.load(self.model_path, env=self.env)
-        else:
-            self.logger.info("Creating new PPO model")
-            self.model = PPO(
-                "MultiInputPolicy",  # Policy for Dict observation spaces
-                self.env,
-                verbose=1,
-                learning_rate=0.0003,
-                n_steps=2048,
-                batch_size=64,
-                n_epochs=10,
-                gamma=0.99,
-                gae_lambda=0.95,
-                clip_range=0.2,
-                tensorboard_log="./tetris_ppo_tensorboard/"
+        if self.rl_agent is None:
+            self.rl_agent = TetrisRLAgent(
+                env=self.env,
+                algorithm=self.algorithm,
+                model_path=self.model_path,
+                log_dir="./tetris_logs"
             )
+        
+        self.model = self.rl_agent.create_model()
+        
+        return self.model
         
     def train(self, total_timesteps=100000, save_path="tetris_model"):
         """
@@ -87,9 +77,14 @@ class TetrisHybridAI:
             self.create_model()
         
         self.logger.info(f"Training model for {total_timesteps} timesteps")
-        self.model.learn(total_timesteps=total_timesteps)
         
-        self.model.save(save_path)
+        self.rl_agent.train(
+            total_timesteps=total_timesteps,
+            checkpoint_freq=10000,
+            eval_freq=10000
+        )
+        
+        self.rl_agent.save(save_path)
         self.logger.info(f"Model saved to {save_path}")
         
     def play(self, episodes=1):
@@ -104,29 +99,12 @@ class TetrisHybridAI:
         
         self.logger.info(f"Playing {episodes} episodes of Tetris")
         
-        for episode in range(episodes):
-            obs = self.env.reset()
-            done = False
-            total_reward = 0
-            steps = 0
-            
-            while not done:
-                action, _ = self.model.predict(obs, deterministic=True)
-                
-                obs, reward, done, info = self.env.step(action)
-                
-                total_reward += reward[0]
-                steps += 1
-                
-                if steps % 100 == 0:
-                    self.logger.info(f"Episode {episode+1}, Step {steps}, Score: {info[0]['score']}")
-                
-                if done:
-                    self.logger.info(f"Episode {episode+1} finished after {steps} steps")
-                    self.logger.info(f"Final score: {info[0]['score']}, Lines cleared: {info[0]['lines']}")
-                    break
+        episode_rewards = self.rl_agent.play(episodes=episodes, deterministic=True)
         
-        self.env.close()
+        mean_reward = np.mean(episode_rewards) if episode_rewards else 0
+        self.logger.info(f"Mean reward over {episodes} episodes: {mean_reward:.2f}")
+        
+        return episode_rewards
         
     def close(self):
         """Clean up resources."""
