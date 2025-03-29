@@ -150,7 +150,6 @@ def create_zelda_env(rom_path, render_mode="headless"):
         return env
     
     env = DummyVecEnv([make_env])
-    env = VecFrameStack(env, n_stack=4)
     
     return env
 
