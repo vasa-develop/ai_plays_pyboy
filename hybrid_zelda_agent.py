@@ -187,6 +187,7 @@ class HybridZeldaAgent:
         """
         Detect if there's dialogue on screen and extract it.
         This is a placeholder - actual implementation would need OCR or memory reading.
+        Includes dialogue buffering to only return complete dialogue.
         
         Args:
             observation: Raw observation from the environment
@@ -202,7 +203,48 @@ class HybridZeldaAgent:
             else:
                 return None
         
-        return None
+        
+        is_dialogue_frame = False
+        dialogue_text = None
+        
+        
+        if is_dialogue_frame and dialogue_text:
+            if not hasattr(self, '_dialogue_buffer'):
+                self._dialogue_buffer = []
+                self._dialogue_stable_count = 0
+                self._last_dialogue = None
+            
+            self._dialogue_buffer.append(dialogue_text)
+            
+            if self._last_dialogue == dialogue_text:
+                self._dialogue_stable_count += 1
+            else:
+                self._dialogue_stable_count = 0
+                self._last_dialogue = dialogue_text
+            
+            if self._dialogue_stable_count >= 5:  # Adjust threshold as needed
+                complete_dialogue = dialogue_text
+                self._dialogue_buffer = []
+                self._dialogue_stable_count = 0
+                self._last_dialogue = None
+                return complete_dialogue
+            
+            return None
+        else:
+            if hasattr(self, '_dialogue_buffer') and len(self._dialogue_buffer) > 0:
+                self._dialogue_stable_count += 1
+                if self._dialogue_stable_count >= 10:  # Adjust threshold as needed
+                    if self._last_dialogue:
+                        complete_dialogue = self._last_dialogue
+                        self._dialogue_buffer = []
+                        self._dialogue_stable_count = 0
+                        self._last_dialogue = None
+                        return complete_dialogue
+                    self._dialogue_buffer = []
+                    self._dialogue_stable_count = 0
+                    self._last_dialogue = None
+            
+            return None
     
     def _update_game_history(self, game_state: Dict[str, Any], action: int, reward: float, 
                             info: Dict[str, Any], dialogue: Optional[str] = None):
@@ -292,7 +334,13 @@ class HybridZeldaAgent:
         """
         self.logger.info("Getting LLM guidance for current game state")
         
+        if hasattr(self, '_last_llm_request_step'):
+            self._last_llm_request_step = len(self.game_history)
+        
         if len(self.dialogue_history) > 0 and self.dialogue_history[-1]:
+            if hasattr(self, '_last_dialogue_processed'):
+                self._last_dialogue_processed = self.dialogue_history[-1]
+                
             dialogue_context = {
                 "map_position": game_state["map_position"],
                 "previous_objectives": [self.current_objective]
@@ -373,6 +421,11 @@ class HybridZeldaAgent:
         
         episode_rewards = []
         
+        if not hasattr(self, '_last_llm_request_step'):
+            self._last_llm_request_step = 0
+            self._last_dialogue_processed = None
+            self._min_steps_between_llm_requests = 30  # Minimum steps between random LLM requests
+        
         for episode in range(episodes):
             self.logger.info(f"Starting episode {episode+1}/{episodes}")
             
@@ -394,7 +447,21 @@ class HybridZeldaAgent:
                 
                 dialogue = self._detect_dialogue(obs)
                 
-                use_llm = dialogue is not None or np.random.random() < llm_guidance_frequency or self._should_use_llm(game_state, reward_history)
+                if dialogue is not None:
+                    if not hasattr(self, 'dialogue_history'):
+                        self.dialogue_history = []
+                    self.dialogue_history.append(dialogue)
+                    game_state['dialogue'] = dialogue  # Add to game state for LLM context
+                
+                steps_since_last_request = step - self._last_llm_request_step
+                
+                dialogue_trigger = dialogue is not None and dialogue != self._last_dialogue_processed
+                
+                random_trigger = steps_since_last_request >= self._min_steps_between_llm_requests and np.random.random() < llm_guidance_frequency
+                
+                other_trigger = self._should_use_llm(game_state, reward_history)
+                
+                use_llm = dialogue_trigger or random_trigger or other_trigger
                 
                 if use_llm:
                     guidance = self._get_llm_guidance(game_state)
