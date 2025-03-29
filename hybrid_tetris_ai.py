@@ -7,6 +7,8 @@ import torch.optim as optim
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from gym_wrapper import TetrisPyBoyEnv
+from state_preprocessor import TetrisStatePreprocessor
+from custom_wrappers import TetrisFeatureWrapper, TetrisRewardWrapper, VecTetrisFeatureWrapper
 
 class TetrisHybridAI:
     """
@@ -29,6 +31,7 @@ class TetrisHybridAI:
         self.render_mode = render_mode
         self.env = None
         self.model = None
+        self.state_preprocessor = TetrisStatePreprocessor()
         
     def create_environment(self):
         """Create and initialize the Tetris environment."""
@@ -36,8 +39,16 @@ class TetrisHybridAI:
             self.logger.error(f"ROM file not found: {self.rom_path}")
             raise FileNotFoundError(f"ROM file not found: {self.rom_path}")
         
-        self.env = DummyVecEnv([lambda: TetrisPyBoyEnv(rom_path=self.rom_path, render_mode=self.render_mode)])
-        self.logger.info("Tetris environment created successfully")
+        base_env = TetrisPyBoyEnv(rom_path=self.rom_path, render_mode=self.render_mode)
+        
+        feature_env = TetrisFeatureWrapper(base_env)
+        enhanced_env = TetrisRewardWrapper(feature_env)
+        
+        self.env = DummyVecEnv([lambda: enhanced_env])
+        
+        self.env = VecTetrisFeatureWrapper(self.env)
+        
+        self.logger.info("Tetris environment with feature extraction created successfully")
         
     def create_model(self):
         """Create or load a reinforcement learning model."""
