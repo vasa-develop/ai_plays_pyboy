@@ -81,14 +81,14 @@ class TetrisRLAgent:
                     "MlpPolicy",
                     self.env,
                     verbose=1,
-                    learning_rate=0.003,  # Increased from 0.0003 to accelerate learning
-                    n_steps=1024,         # Reduced from 2048 for more frequent updates
+                    learning_rate=0.005,  # Further increased from 0.003 to accelerate learning
+                    n_steps=512,          # Further reduced for even more frequent updates
                     batch_size=64,
                     n_epochs=10,
                     gamma=0.99,
                     gae_lambda=0.95,
                     clip_range=0.2,
-                    ent_coef=0.05,        # Increased entropy coefficient to strongly encourage exploration
+                    ent_coef=0.1,         # Further increased entropy coefficient for more exploration
                     vf_coef=0.5,          # Value function coefficient
                     policy_kwargs=dict(net_arch=[64, 64]),  # Simpler network architecture
                     tensorboard_log=os.path.join(self.log_dir, 'tensorboard')
