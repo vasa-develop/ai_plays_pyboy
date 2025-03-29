@@ -139,7 +139,7 @@ class TetrisPyBoyEnv(gym.Env):
     def _is_game_over(self):
         """Check if the game is over."""
         
-        if self.frame_count < 60:
+        if self.frame_count < 120:
             return False
             
         explicit_game_over = hasattr(self.tetris, 'game_over') and self.tetris.game_over
@@ -147,9 +147,12 @@ class TetrisPyBoyEnv(gym.Env):
         score = getattr(self.tetris, 'score', 0)
         level = getattr(self.tetris, 'level', 0)
         
-        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 180)
+        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 300)
         
-        game_over = explicit_game_over or implicit_game_over
+        board = self._get_observation()['board']
+        top_rows_filled = np.sum(board[0:4, :]) > 15  # If more than 15 cells in top 4 rows are filled
+        
+        game_over = explicit_game_over or implicit_game_over or top_rows_filled
         
         if game_over and self.render_mode == "human" and self.pyboy is not None:
             self._save_game_over_screenshot()
