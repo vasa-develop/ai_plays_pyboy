@@ -21,8 +21,8 @@ class TetrisRewardFunction:
             'holes': -0.5,       # Penalty for creating holes
             'bumpiness': -0.2,   # Penalty for uneven surface
             'height': -0.1,      # Penalty for increasing height
-            'game_over': -50.0,  # Penalty for game over
-            'survival': 0.01     # Small reward for surviving each step
+            'game_over': -10.0,  # Reduced penalty for game over (was -50.0)
+            'survival': 0.1      # Increased reward for surviving each step (was 0.01)
         }
     
     def calculate_reward(self, prev_obs, obs, info, done):

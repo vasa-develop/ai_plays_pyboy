@@ -61,6 +61,9 @@ class TetrisPyBoyEnv(gym.Env):
                     board[y][x] = 1
         
         current_piece = np.zeros(7, dtype=np.int8)
+        current_piece_id = self._tetromino_to_id(self.tetris.current_tetromino())
+        if current_piece_id is not None:
+            current_piece[current_piece_id] = 1
         
         next_piece = np.zeros(7, dtype=np.int8)
         next_piece_id = self._tetromino_to_id(self.tetris.next_tetromino())
@@ -109,7 +112,9 @@ class TetrisPyBoyEnv(gym.Env):
     
     def _is_game_over(self):
         """Check if the game is over."""
-        return self.tetris.score == 0 and self.tetris.level == 0 and self.frame_count > 60
+        
+        return ((hasattr(self.tetris, 'game_over') and self.tetris.game_over) or 
+                (self.tetris.score == 0 and self.tetris.level == 0 and self.frame_count > 120))
     
     def step(self, action):
         """
@@ -128,6 +133,9 @@ class TetrisPyBoyEnv(gym.Env):
         if self.pyboy is None:
             raise RuntimeError("Environment not initialized. Call reset() first.")
         
+        action_name = "None" if action == 6 else str(self.ACTIONS[action]).split('.')[-1]
+        print(f"Frame {self.frame_count}: Taking action {action_name}")
+        
         if self.ACTIONS[action] is not None:
             self.pyboy.send_input(self.ACTIONS[action])
             self.pyboy.tick()
@@ -142,7 +150,6 @@ class TetrisPyBoyEnv(gym.Env):
         reward = self._calculate_reward()
         
         terminated = self._is_game_over()
-        
         truncated = self.frame_count >= self.max_frames_per_episode
         
         info = {
@@ -151,6 +158,15 @@ class TetrisPyBoyEnv(gym.Env):
             'level': self.tetris.level,
             'frame_count': self.frame_count
         }
+        
+        print(f"Frame {self.frame_count}: Score={info['score']}, Lines={info['lines']}, Reward={reward:.2f}")
+        
+        if terminated:
+            print(f"Episode terminated at frame {self.frame_count}. Game over detected.")
+            print(f"Final score: {info['score']}, Lines cleared: {info['lines']}")
+        
+        if truncated:
+            print(f"Episode truncated at frame {self.frame_count} (max frames reached).")
         
         return observation, reward, terminated, truncated, info
     
