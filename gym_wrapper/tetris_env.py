@@ -46,6 +46,7 @@ class TetrisPyBoyEnv(gym.Env):
         self.tetris = None
         self.prev_score = 0
         self.prev_lines = 0
+        self.prev_level = 0  # Track previous level for level completion rewards
         self.frame_count = 0
         self.max_frames_per_episode = 10000  # Limit episode length
         self.piece_locked = False  # Flag to track if the current piece has locked in place
@@ -102,16 +103,19 @@ class TetrisPyBoyEnv(gym.Env):
             return None
     
     def _calculate_reward(self):
-        """Calculate the reward based on score, lines cleared, and game state."""
+        """Calculate the reward based on score, lines cleared, level completion, and game state."""
         try:
             current_score = getattr(self.tetris, 'score', 0)
             current_lines = getattr(self.tetris, 'lines', 0)
+            current_level = getattr(self.tetris, 'level', 0)
             
             score_diff = current_score - self.prev_score
             lines_diff = current_lines - self.prev_lines
+            level_diff = current_level - self.prev_level
             
             self.prev_score = current_score
             self.prev_lines = current_lines
+            self.prev_level = current_level
             
             reward = 0.0
             
@@ -123,6 +127,11 @@ class TetrisPyBoyEnv(gym.Env):
                 line_reward = 2 ** lines_diff
                 reward += line_reward
                 print(f"[REWARD] +{line_reward:.2f} for clearing {lines_diff} lines")
+            
+            if level_diff > 0:
+                level_reward = 10.0 * level_diff  # Significant reward for advancing levels
+                reward += level_reward
+                print(f"[REWARD] +{level_reward:.2f} for advancing {level_diff} level(s) to level {current_level}")
             
             if self.turn_based:
                 if not self._is_game_over():
@@ -475,6 +484,7 @@ class TetrisPyBoyEnv(gym.Env):
         
         self.prev_score = 0
         self.prev_lines = 0
+        self.prev_level = 0
         self.frame_count = 0
         self.piece_locked = False
         
