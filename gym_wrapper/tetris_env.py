@@ -234,9 +234,9 @@ class TetrisPyBoyEnv(gym.Env):
         truncated = self.frame_count >= self.max_frames_per_episode
         
         info = {
-            'score': self.tetris.score,
-            'lines': self.tetris.lines,
-            'level': self.tetris.level,
+            'score': getattr(self.tetris, 'score', 0),
+            'lines': getattr(self.tetris, 'lines', 0),
+            'level': getattr(self.tetris, 'level', 0),
             'frame_count': self.frame_count,
             'turn_based': self.turn_based
         }
@@ -300,9 +300,9 @@ class TetrisPyBoyEnv(gym.Env):
         observation = self._get_observation()
         
         info = {
-            'score': self.tetris.score,
-            'lines': self.tetris.lines,
-            'level': self.tetris.level,
+            'score': getattr(self.tetris, 'score', 0),
+            'lines': getattr(self.tetris, 'lines', 0),
+            'level': getattr(self.tetris, 'level', 0),
             'frame_count': self.frame_count,
             'turn_based': self.turn_based
         }
