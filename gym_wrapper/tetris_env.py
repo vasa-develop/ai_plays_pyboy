@@ -171,7 +171,7 @@ class TetrisPyBoyEnv(gym.Env):
         if self.pyboy is not None:
             self.pyboy.stop()
         
-        window = "SDL2" if self.render_mode == "human" else "headless"
+        window = "SDL2" if self.render_mode == "human" else "null"
         self.pyboy = PyBoy(self.rom_path, window=window, scale=3)
         
         self.pyboy.set_emulation_speed(0)
