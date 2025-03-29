@@ -15,14 +15,15 @@ class TetrisRewardFunction:
         self.prev_level = 0
         
         self.weights = {
-            'score': 2.0,        # Increased weight for score increase (was 1.0)
-            'lines': 15.0,       # Increased weight for lines cleared (was 10.0)
-            'tetris': 30.0,      # Increased reward for clearing 4 lines at once (was 20.0)
-            'holes': -0.3,       # Reduced penalty for creating holes (was -0.5)
-            'bumpiness': -0.1,   # Reduced penalty for uneven surface (was -0.2)
-            'height': -0.05,     # Reduced penalty for increasing height (was -0.1)
-            'game_over': -5.0,   # Further reduced penalty for game over (was -10.0)
-            'survival': 0.2      # Increased reward for surviving each step (was 0.1)
+            'score': 3.0,        # Further increased weight for score increase
+            'lines': 20.0,       # Further increased weight for lines cleared
+            'tetris': 40.0,      # Further increased reward for clearing 4 lines at once
+            'holes': -0.2,       # Further reduced penalty for creating holes
+            'bumpiness': -0.05,  # Further reduced penalty for uneven surface
+            'height': -0.02,     # Further reduced penalty for increasing height
+            'game_over': -3.0,   # Further reduced penalty for game over
+            'survival': 0.3,     # Further increased reward for surviving each step
+            'piece_placement': 1.0  # New reward for successful piece placement
         }
     
     def calculate_reward(self, prev_obs, obs, info, done):
@@ -41,6 +42,7 @@ class TetrisRewardFunction:
         current_score = info.get('score', 0)
         current_lines = info.get('lines', 0)
         current_level = info.get('level', 0)
+        piece_placed = info.get('piece_placed', False)
         
         score_reward = (current_score - self.prev_score) * self.weights['score']
         
@@ -60,6 +62,8 @@ class TetrisRewardFunction:
         
         survival_reward = self.weights['survival']
         
+        piece_placement_reward = self.weights.get('piece_placement', 0.0) if piece_placed else 0.0
+        
         self.prev_score = current_score
         self.prev_lines = current_lines
         self.prev_level = current_level
@@ -70,7 +74,8 @@ class TetrisRewardFunction:
             level_reward +
             board_reward +
             game_over_penalty +
-            survival_reward
+            survival_reward +
+            piece_placement_reward
         )
         
         return total_reward
@@ -132,14 +137,15 @@ class AdaptiveRewardFunction(TetrisRewardFunction):
         
         self.initial_weights = self.weights.copy()
         self.final_weights = {
-            'score': 0.5,        # Reduced focus on score
-            'lines': 15.0,       # Increased focus on lines
-            'tetris': 30.0,      # Increased focus on Tetris
-            'holes': -1.0,       # Increased penalty for holes
-            'bumpiness': -0.5,   # Increased penalty for bumpiness
-            'height': -0.2,      # Increased penalty for height
-            'game_over': -50.0,  # Same penalty for game over
-            'survival': 0.005    # Reduced survival reward
+            'score': 1.0,        # Balanced focus on score
+            'lines': 25.0,       # Further increased focus on lines
+            'tetris': 50.0,      # Further increased focus on Tetris
+            'holes': -0.5,       # Reduced penalty for holes
+            'bumpiness': -0.2,   # Reduced penalty for bumpiness
+            'height': -0.1,      # Reduced penalty for height
+            'game_over': -10.0,  # Reduced penalty for game over
+            'survival': 0.1,     # Increased survival reward
+            'piece_placement': 2.0  # Increased reward for piece placement in later stages
         }
     
     def calculate_reward(self, prev_obs, obs, info, done):
