@@ -166,6 +166,19 @@ class TetrisPyBoyEnv(gym.Env):
             
         explicit_game_over = hasattr(self.tetris, 'game_over') and self.tetris.game_over
         
+        game_over_screen = False
+        try:
+            if self.pyboy is not None:
+                screen_buffer = self.pyboy.screen_ndarray()
+                if screen_buffer is not None:
+                    center_region = screen_buffer[120:300, 80:240]
+                    white_pixels = np.sum(center_region > 200)
+                    if white_pixels > 500:  # Threshold for detecting white text
+                        game_over_screen = True
+                        print("[GAME_OVER] Detected game over screen")
+        except Exception as e:
+            print(f"Warning: Error checking game over screen: {e}")
+        
         score = getattr(self.tetris, 'score', 0)
         level = getattr(self.tetris, 'level', 0)
         
@@ -174,10 +187,10 @@ class TetrisPyBoyEnv(gym.Env):
         board = self._get_observation()['board']
         top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows instead of 4
         
-        game_over = explicit_game_over or implicit_game_over or top_rows_filled
+        game_over = explicit_game_over or game_over_screen or implicit_game_over or top_rows_filled
         
         if game_over:
-            print(f"[GAME_OVER] Detected: explicit={explicit_game_over}, implicit={implicit_game_over}, top_rows={top_rows_filled}")
+            print(f"[GAME_OVER] Detected: explicit={explicit_game_over}, screen={game_over_screen}, implicit={implicit_game_over}, top_rows={top_rows_filled}")
             if self.render_mode == "human" and self.pyboy is not None:
                 self._save_game_over_screenshot()
             
