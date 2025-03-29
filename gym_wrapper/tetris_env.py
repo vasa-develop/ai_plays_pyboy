@@ -112,6 +112,9 @@ class TetrisPyBoyEnv(gym.Env):
     def _is_game_over(self):
         """Check if the game is over."""
         
+        if self.frame_count < 30:
+            return False
+            
         return ((hasattr(self.tetris, 'game_over') and self.tetris.game_over) or 
                 (self.tetris.score == 0 and self.tetris.level == 0 and self.frame_count > 120))
     

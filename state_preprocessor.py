@@ -24,9 +24,14 @@ class TetrisStatePreprocessor:
         if isinstance(observation, dict):
             board = observation['board']
             next_piece = observation.get('next_piece', np.zeros(7, dtype=np.int8))
-        elif isinstance(observation, np.ndarray) and observation.ndim >= 2:
-            board = observation
-            next_piece = np.zeros(7, dtype=np.int8)
+        elif isinstance(observation, np.ndarray):
+            if observation.ndim >= 2:
+                board = observation
+                next_piece = np.zeros(7, dtype=np.int8)
+            else:
+                print(f"Handling flattened observation with shape: {observation.shape}")
+                board = np.zeros((18, 10), dtype=np.int8)
+                next_piece = np.zeros(7, dtype=np.int8)
         else:
             print(f"Warning: Unknown observation format: {type(observation)}")
             board = np.zeros((18, 10), dtype=np.int8)
@@ -35,7 +40,7 @@ class TetrisStatePreprocessor:
         height_profile = self._get_height_profile(board)
         holes = self._count_holes(board, height_profile)
         bumpiness = self._calculate_bumpiness(height_profile)
-        aggregated_height = sum(height_profile)
+        aggregated_height = int(sum(height_profile))
         
         if not isinstance(next_piece, np.ndarray) or next_piece.shape[0] != 7:
             next_piece = np.zeros(7, dtype=np.int8)
