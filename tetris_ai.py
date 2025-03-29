@@ -116,8 +116,11 @@ def play_tetris_ai(rom_path="tetris.gb"):
             pyboy.stop()
             return
         
-        tetris = pyboy.game_wrapper()
-        tetris.start_game()
+        tetris = pyboy.game_wrapper
+        tetris.start_game(timer_div=0x00)
+        
+        for _ in range(60):
+            pyboy.tick()
         
         ai = TetrisAI(pyboy, tetris)
         ai.play_game()
