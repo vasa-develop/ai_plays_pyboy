@@ -15,14 +15,14 @@ class TetrisRewardFunction:
         self.prev_level = 0
         
         self.weights = {
-            'score': 1.0,        # Weight for score increase
-            'lines': 10.0,       # Weight for lines cleared
-            'tetris': 20.0,      # Additional reward for clearing 4 lines at once
-            'holes': -0.5,       # Penalty for creating holes
-            'bumpiness': -0.2,   # Penalty for uneven surface
-            'height': -0.1,      # Penalty for increasing height
-            'game_over': -10.0,  # Reduced penalty for game over (was -50.0)
-            'survival': 0.1      # Increased reward for surviving each step (was 0.01)
+            'score': 2.0,        # Increased weight for score increase (was 1.0)
+            'lines': 15.0,       # Increased weight for lines cleared (was 10.0)
+            'tetris': 30.0,      # Increased reward for clearing 4 lines at once (was 20.0)
+            'holes': -0.3,       # Reduced penalty for creating holes (was -0.5)
+            'bumpiness': -0.1,   # Reduced penalty for uneven surface (was -0.2)
+            'height': -0.05,     # Reduced penalty for increasing height (was -0.1)
+            'game_over': -5.0,   # Further reduced penalty for game over (was -10.0)
+            'survival': 0.2      # Increased reward for surviving each step (was 0.1)
         }
     
     def calculate_reward(self, prev_obs, obs, info, done):
