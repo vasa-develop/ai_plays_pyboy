@@ -88,8 +88,9 @@ class TetrisRLAgent:
                     gamma=0.99,
                     gae_lambda=0.95,
                     clip_range=0.2,
-                    ent_coef=0.01,        # Added entropy coefficient to encourage exploration
+                    ent_coef=0.05,        # Increased entropy coefficient to strongly encourage exploration
                     vf_coef=0.5,          # Value function coefficient
+                    policy_kwargs=dict(net_arch=[64, 64]),  # Simpler network architecture
                     tensorboard_log=os.path.join(self.log_dir, 'tensorboard')
                 )
             elif self.algorithm == 'a2c':
