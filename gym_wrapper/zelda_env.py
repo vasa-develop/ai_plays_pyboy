@@ -57,7 +57,7 @@ class ZeldaPyBoyEnv(gym.Env):
         self.observation_space = spaces.Dict({
             'screen': spaces.Box(low=0, high=255, shape=(144, 160, 3), dtype=np.uint8),
             'health': spaces.Box(low=0, high=14, shape=(1,), dtype=np.int8),
-            'position': spaces.Box(low=0, high=255, shape=(2,), dtype=np.int8),
+            'position': spaces.Box(low=0, high=255, shape=(2,), dtype=np.uint8),  # Changed to uint8
             'map_position': spaces.Box(low=0, high=15, shape=(2,), dtype=np.int8),
             'rupees': spaces.Box(low=0, high=999, shape=(1,), dtype=np.int16),
             'items': spaces.MultiBinary(20),  # Simplified representation of inventory
