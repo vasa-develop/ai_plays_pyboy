@@ -55,6 +55,26 @@ python hybrid_zelda_agent.py --rom path/to/zelda.gbc --rl-model path/to/model.zi
 python hybrid_zelda_agent.py --rom path/to/zelda.gbc --llm-frequency 0.2
 ```
 
+## Emulation Modes
+
+The hybrid agent supports two emulation modes:
+
+1. **Continuous Mode**: The game runs continuously, and the agent makes decisions based on the current game state. This is the default mode.
+
+2. **Turn-Based Mode**: The game only advances when the agent sends inputs. This mode significantly reduces API calls and gives the agent more control over the game.
+
+### Turn-Based Mode Usage
+
+```bash
+# Play with turn-based emulation
+python test_hybrid_agent.py --rom path/to/zelda.gbc --emulation-mode turn_based
+
+# Test button inputs directly
+python test_hybrid_agent.py --rom path/to/zelda.gbc --mode test_buttons
+```
+
+In turn-based mode, the agent uses a button input format similar to ClaudePlayer: `A2 B1 R5` which means "press A for 2 frames, press B for 1 frame, press Right for 5 frames".
+
 ## Environment Setup
 
 1. Set up the Python environment:

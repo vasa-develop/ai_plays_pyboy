@@ -21,7 +21,8 @@ class HybridZeldaAgent:
         llm_api_key: Optional[str] = None,
         llm_model: str = "openai/gpt-4-turbo",
         log_dir: str = "./zelda_hybrid_logs",
-        render_mode: str = "human"
+        render_mode: str = "human",
+        emulation_mode: str = "continuous"
     ):
         """
         Initialize the hybrid Zelda agent.
@@ -55,8 +56,11 @@ class HybridZeldaAgent:
         self.env = create_zelda_env(
             rom_path, 
             render_mode=render_mode,
-            save_state_path=os.path.join(log_dir, "zelda_gameplay.state")
+            save_state_path=os.path.join(log_dir, "zelda_gameplay.state"),
+            emulation_mode=emulation_mode
         )
+        
+        self.emulation_mode = emulation_mode
 
         self.rl_agent = ZeldaRLAgent(
             env=self.env,
@@ -482,7 +486,30 @@ class HybridZeldaAgent:
         Returns:
             List of episode rewards
         """
-        self.logger.info(f"Playing {episodes} episodes with hybrid agent")
+        if hasattr(self, 'emulation_mode') and self.emulation_mode == "turn_based":
+            self.logger.info(f"Using turn-based mode for gameplay")
+            return self.play_turn_based(episodes=episodes, max_steps_per_episode=max_steps_per_episode)
+        else:
+            self.logger.info(f"Using continuous mode for gameplay")
+            return self.play_continuous(episodes=episodes, max_steps_per_episode=max_steps_per_episode,
+                                       llm_guidance_frequency=llm_guidance_frequency, 
+                                       deterministic=deterministic)
+    
+    def play_continuous(self, episodes: int = 1, max_steps_per_episode: int = 10000,
+                       llm_guidance_frequency: float = 0.1, deterministic: bool = True):
+        """
+        Play Zelda using the hybrid agent in continuous mode.
+
+        Args:
+            episodes: Number of episodes to play
+            max_steps_per_episode: Maximum steps per episode
+            llm_guidance_frequency: Frequency of LLM guidance (0.0 to 1.0)
+            deterministic: Whether to use deterministic actions for RL
+
+        Returns:
+            List of episode rewards
+        """
+        self.logger.info(f"Playing {episodes} episodes with hybrid agent in continuous mode")
 
         episode_rewards = []
 
@@ -610,6 +637,188 @@ class HybridZeldaAgent:
 
         return episode_rewards
 
+    def _get_llm_button_guidance(self, game_state: Dict[str, Any]) -> str:
+        """
+        Get button input suggestions from the LLM in the format used by ClaudePlayer.
+        
+        Args:
+            game_state: Current game state
+            
+        Returns:
+            String of button inputs in the format "A5 B2 R3 L1"
+        """
+        if not hasattr(self, 'llm') or self.llm is None:
+            self.logger.warning("LLM not initialized, using default button sequence")
+            return "A1"  # Default to pressing A once
+        
+        context = {
+            "game_state": game_state,
+            "current_objective": game_state.get("current_objective", "Explore the game"),
+            "dialogue_history": getattr(self, "dialogue_history", [])[-3:] if hasattr(self, "dialogue_history") else [],
+            "current_plan_step": self.current_plan[0] if hasattr(self, "current_plan") and self.current_plan else "No current plan step"
+        }
+        
+        self.logger.info("Requesting button inputs from LLM...")
+        response = self.llm.get_button_inputs(context)
+        
+        if "error" in response:
+            self.logger.warning(f"Error getting button inputs: {response['error']}")
+            return "A1"  # Default to pressing A once
+        
+        button_inputs = response.get("inputs", "A1")
+        self.logger.info(f"LLM suggested button inputs: {button_inputs}")
+        
+        return button_inputs
+    
+    def play_turn_based(self, episodes: int = 1, max_steps_per_episode: int = 10000):
+        """
+        Play Zelda using the hybrid agent in turn-based mode.
+        
+        Args:
+            episodes: Number of episodes to play
+            max_steps_per_episode: Maximum steps per episode
+            
+        Returns:
+            List of episode rewards
+        """
+        self.logger.info(f"Playing {episodes} episodes with hybrid agent in turn-based mode")
+        
+        episode_rewards = []
+        
+        if not hasattr(self, '_last_llm_request_step'):
+            self._last_llm_request_step = 0
+            self._last_dialogue_processed = None
+            self._min_steps_between_llm_requests = 10  # Shorter interval for turn-based mode
+        
+        for episode in range(episodes):
+            self.logger.info(f"Starting episode {episode+1}/{episodes}")
+            
+            reset_result = self.env.reset()
+            if isinstance(reset_result, tuple) and len(reset_result) == 2:
+                obs, info = reset_result
+            else:
+                obs = reset_result
+                info = {}
+            
+            done = False
+            truncated = False
+            episode_reward = 0
+            step = 0
+            
+            reward_history = []
+            
+            while not (done or truncated) and step < max_steps_per_episode:
+                game_state = self._extract_game_state(obs)
+                
+                dialogue = self._detect_dialogue(obs)
+                if dialogue is not None:
+                    if not hasattr(self, 'dialogue_history'):
+                        self.dialogue_history = []
+                    self.dialogue_history.append(dialogue)
+                    game_state['dialogue'] = dialogue
+                    self.logger.info(f"Detected dialogue: {dialogue[:50]}...")
+                
+                button_sequence = self._get_llm_button_guidance(game_state)
+                
+                self.logger.info(f"Executing button sequence: {button_sequence}")
+                actions_taken = self.execute_button_sequence(button_sequence)
+                
+                if hasattr(self.env, 'envs') and len(self.env.envs) > 0:
+                    env_instance = self.env.envs[0]
+                    
+                    unwrapped_env = env_instance
+                    while hasattr(unwrapped_env, 'env') and not hasattr(unwrapped_env, 'pyboy'):
+                        unwrapped_env = unwrapped_env.env
+                    
+                    if hasattr(unwrapped_env, '_get_observation'):
+                        next_obs = unwrapped_env._get_observation()
+                    else:
+                        self.logger.warning("Could not get observation from environment")
+                        break
+                    
+                    prev_state = game_state
+                    curr_state = self._extract_game_state(next_obs)
+                    
+                    reward = 0.0  # Initialize as float to avoid type errors
+                    
+                    health_diff = float(curr_state.get('health', 0) - prev_state.get('health', 0))
+                    reward += health_diff * 5.0  # Reward for gaining health, penalty for losing
+                    
+                    rupee_diff = float(curr_state.get('rupees', 0) - prev_state.get('rupees', 0))
+                    reward += rupee_diff * 0.5  # Small reward for collecting rupees
+                    
+                    import numpy as np
+                    if not np.array_equal(curr_state.get('map_position'), prev_state.get('map_position')):
+                        reward += 2.0  # Reward for exploring new screens
+                    
+                    done = env_instance._is_game_over() if hasattr(env_instance, '_is_game_over') else False
+                    truncated = step >= max_steps_per_episode
+                    
+                    self._update_game_history(game_state, 0, reward, {}, dialogue)  # Use 0 as placeholder for action
+                    
+                    obs = next_obs
+                    episode_reward += reward
+                    reward_history.append(reward)
+                else:
+                    self.logger.warning("Could not access underlying environment")
+                    break
+                
+                step += 1
+                
+                if step % 10 == 0:
+                    self.logger.info(f"Episode {episode+1}, Step {step}, Reward: {float(episode_reward):.2f}")
+            
+            episode_rewards.append(episode_reward)
+            self.logger.info(f"Episode {episode+1} completed with reward {float(episode_reward):.2f} in {step} steps")
+            
+            episode_data = {
+                "episode": episode + 1,
+                "reward": float(episode_reward),
+                "steps": step,
+                "history": self.game_history[-min(step, 1000):] if hasattr(self, 'game_history') else []
+            }
+            
+            episode_file = os.path.join(self.log_dir, f"episode_{episode+1}_turn_based_data.json")
+            with open(episode_file, 'w') as f:
+                json.dump(episode_data, f, indent=2)
+            
+            self.logger.info(f"Episode data saved to {episode_file}")
+        
+        return episode_rewards
+    
+    def execute_button_sequence(self, input_string: str) -> List[str]:
+        """
+        Execute a sequence of button inputs in the format used by ClaudePlayer.
+        
+        Args:
+            input_string: String of button inputs in the format "A5 B2 R3 L1"
+            
+        Returns:
+            List of actions taken
+        """
+        from zelda_input_utils import parse_and_execute_input
+        
+        self.logger.info(f"Executing button sequence: {input_string}")
+        
+        if self.emulation_mode == "turn_based":
+            if hasattr(self.env, 'envs') and len(self.env.envs) > 0:
+                env_instance = self.env.envs[0]
+                
+                while hasattr(env_instance, 'env') and not hasattr(env_instance, 'pyboy'):
+                    env_instance = env_instance.env
+                
+                if hasattr(env_instance, 'pyboy'):
+                    return parse_and_execute_input(env_instance, input_string)
+                else:
+                    self.logger.warning("Could not find PyBoy instance in environment")
+                    return []
+            else:
+                self.logger.warning("Could not access underlying environment")
+                return []
+        else:
+            self.logger.warning("Button sequence execution is designed for turn-based mode")
+            return []
+    
     def close(self):
         """Close the environment."""
         if hasattr(self, 'env') and self.env is not None:

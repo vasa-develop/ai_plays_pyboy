@@ -22,8 +22,10 @@ logger = logging.getLogger(__name__)
 def main():
     parser = argparse.ArgumentParser(description="Test the Hybrid Zelda Agent")
     parser.add_argument("--rom", required=True, help="Path to Zelda ROM file")
-    parser.add_argument("--mode", choices=["play", "train", "test_llm"], default="play", 
-                        help="Test mode: play with hybrid agent, train RL component, or test LLM integration")
+    parser.add_argument("--mode", choices=["play", "train", "test_llm", "test_buttons"], default="play", 
+                        help="Test mode: play with hybrid agent, train RL component, test LLM integration, or test button inputs")
+    parser.add_argument("--emulation-mode", choices=["continuous", "turn_based"], default="continuous",
+                        help="Emulation mode: continuous or turn-based")
     parser.add_argument("--rl-model", help="Path to pre-trained RL model (for play mode)")
     parser.add_argument("--timesteps", type=int, default=10000, help="Number of timesteps to train for")
     parser.add_argument("--episodes", type=int, default=1, help="Number of episodes to play")
@@ -90,7 +92,8 @@ def main():
         rl_model_path=args.rl_model,
         llm_api_key=api_key,
         log_dir=args.log_dir,
-        render_mode=args.render
+        render_mode=args.render,
+        emulation_mode=args.emulation_mode
     )
     
     if save_state_path and args.save_state:
@@ -105,6 +108,37 @@ def main():
                 eval_freq=max(1000, args.timesteps // 10),
                 save_freq=max(1000, args.timesteps // 5)
             )
+        elif args.mode == "test_buttons":
+            from zelda_input_utils import BUTTON_RULES
+            
+            if args.emulation_mode != "turn_based":
+                logger.warning("Button testing requires turn-based mode. Switching to turn-based mode.")
+                agent.close()
+                agent = HybridZeldaAgent(
+                    rom_path=args.rom,
+                    rl_model_path=args.rl_model,
+                    llm_api_key=api_key,
+                    log_dir=args.log_dir,
+                    render_mode=args.render,
+                    emulation_mode="turn_based"
+                )
+                
+                if save_state_path and args.save_state:
+                    agent.env.env_method("update_save_state_path", save_state_path)
+            
+            logger.info(f"Button rules:\n{BUTTON_RULES}\n")
+            logger.info("Enter button sequences (or 'exit' to quit):")
+            
+            while True:
+                try:
+                    input_str = input("> ")
+                    if input_str.lower() == "exit":
+                        break
+                    
+                    actions = agent.execute_button_sequence(input_str)
+                    logger.info(f"Executed actions: {actions}")
+                except KeyboardInterrupt:
+                    break
         else:  # play mode
             if args.rl_model:
                 agent.load_rl_model(args.rl_model)

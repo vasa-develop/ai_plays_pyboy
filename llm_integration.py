@@ -264,6 +264,84 @@ class LLMIntegration:
             self.logger.error(f"Error parsing LLM response as JSON: {str(e)}")
             return {"error": f"Failed to parse response: {str(e)}", "raw_response": response}
     
+    def get_button_inputs(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get button input suggestions from the LLM in the format used by ClaudePlayer.
+        
+        Args:
+            context: Dictionary containing game state and other relevant information
+            
+        Returns:
+            Dictionary with button input suggestions
+        """
+        button_rules = """
+        Use the following notation for Game Boy buttons:
+        A (A button), B (B button), U (UP), D (DOWN), L (LEFT), R (RIGHT), S (START), E (SELECT).
+
+        You can combine multiple button presses with their duration:
+        - A5 (press A for 5 frames)
+        - U10 (hold UP for 10 frames)
+
+        Separate each input with spaces:
+        "A2 B2 R5 L2 U2"
+
+        For quick taps, use inputs like:
+        "A1 B1" or just "A B"
+
+        For discrete presses (e.g. navigating menus), use:
+        "R1 R1" to move right twice in a row
+
+        For long holds, specify the number of frames:
+        "U10" (hold UP for 10 frames)
+        """
+        
+        messages = [
+            {"role": "system", "content": f"""
+You are an AI assistant playing Zelda: Link's Awakening on Game Boy.
+You need to provide button inputs to control Link in the game.
+
+{context.get('button_rules', button_rules)}
+
+Based on the game state and current objective, provide a sequence of button inputs that would help achieve the objective.
+Respond in JSON format with a single field 'inputs' containing your button sequence.
+Example: {{"inputs": "A2 R5 U3 B1"}}
+            """},
+            {"role": "user", "content": f"""
+Current objective: {context.get('current_objective', 'Explore the game')}
+
+Game state:
+- Health: {context.get('game_state', {}).get('health', 'Unknown')}
+- Position: {context.get('game_state', {}).get('position', 'Unknown')}
+- Map position: {context.get('game_state', {}).get('map_position', 'Unknown')}
+- Rupees: {context.get('game_state', {}).get('rupees', 'Unknown')}
+- Inventory: {context.get('game_state', {}).get('inventory', 'Unknown')}
+
+Recent dialogue:
+{', '.join(context.get('dialogue_history', ['None']))}
+
+Current plan step: {context.get('current_plan_step', 'No current plan step')}
+
+What button inputs should I use to progress?
+            """}
+        ]
+        
+        response = self.query(messages)
+        if not response:
+            return {"error": "Failed to get LLM response", "inputs": ""}
+        
+        try:
+            json_str = response
+            if "```json" in response:
+                json_str = response.split("```json")[1].split("```")[0].strip()
+            elif "```" in response:
+                json_str = response.split("```")[1].split("```")[0].strip()
+            
+            button_inputs = json.loads(json_str)
+            return button_inputs
+        except Exception as e:
+            self.logger.error(f"Error parsing LLM response as JSON: {str(e)}")
+            return {"error": f"Failed to parse response: {str(e)}", "inputs": "", "raw_response": response}
+    
     def _prepare_game_context(self, game_state: Dict[str, Any], game_history: List[Dict[str, Any]]) -> str:
         """
         Prepare a textual context from the game state and history for the LLM.

@@ -38,12 +38,13 @@ class ZeldaPyBoyEnv(gym.Env):
         None,
     ]
     
-    def __init__(self, rom_path="zelda.gb", render_mode="human", save_state_path=None):
+    def __init__(self, rom_path="zelda.gb", render_mode="human", save_state_path=None, emulation_mode="continuous"):
         super(ZeldaPyBoyEnv, self).__init__()
         
         self.rom_path = rom_path
         self.render_mode = render_mode
         self.save_state_path = save_state_path
+        self.emulation_mode = emulation_mode  # "continuous" or "turn_based"
         self.pyboy = None
         self.frame_count = 0
         self.max_frames_per_episode = 100000  # Limit episode length
@@ -190,12 +191,21 @@ class ZeldaPyBoyEnv(gym.Env):
         
         if self.ACTIONS[action] is not None:
             self.pyboy.send_input(self.ACTIONS[action])
-            self.pyboy.tick()
+            
+            if self.emulation_mode == "turn_based":
+                self.pyboy.tick()
+            else:
+                self.pyboy.tick()
+                
             self.pyboy.send_input(self.RELEASE_ACTIONS[action])
         
-        for _ in range(5):
+        if self.emulation_mode == "turn_based":
             self.pyboy.tick()
             self.frame_count += 1
+        else:
+            for _ in range(5):
+                self.pyboy.tick()
+                self.frame_count += 1
         
         observation = self._get_observation()
         
@@ -210,7 +220,8 @@ class ZeldaPyBoyEnv(gym.Env):
             'rupees': observation['rupees'][0],
             'position': observation['position'],
             'map_position': observation['map_position'],
-            'frame_count': self.frame_count
+            'frame_count': self.frame_count,
+            'emulation_mode': self.emulation_mode
         }
         
         return observation, reward, terminated, truncated, info
@@ -324,6 +335,22 @@ class ZeldaPyBoyEnv(gym.Env):
         self.save_state_path = save_state_path
         logging.info(f"Updated save state path to: {save_state_path}")
         return True
+    
+    def tick(self, frames=1):
+        """
+        Manually advance the emulator by a specified number of frames.
+        Used in turn-based mode to control when the game advances.
+        
+        Args:
+            frames: Number of frames to advance
+            
+        Returns:
+            True if the game should exit, False otherwise
+        """
+        for _ in range(frames):
+            if self.pyboy.tick():
+                return True
+        return False
     
     def close(self):
         """Clean up resources."""
