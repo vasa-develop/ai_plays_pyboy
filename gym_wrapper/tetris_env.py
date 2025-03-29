@@ -102,8 +102,8 @@ class TetrisPyBoyEnv(gym.Env):
     def _calculate_reward(self):
         """Calculate the reward based on score and lines cleared."""
         try:
-            current_score = self.tetris.score
-            current_lines = self.tetris.lines
+            current_score = getattr(self.tetris, 'score', 0)
+            current_lines = getattr(self.tetris, 'lines', 0)
             
             score_diff = current_score - self.prev_score
             lines_diff = current_lines - self.prev_lines
@@ -111,29 +111,45 @@ class TetrisPyBoyEnv(gym.Env):
             self.prev_score = current_score
             self.prev_lines = current_lines
             
-            reward = score_diff / 100.0  # Normalize score
+            reward = 0.0
+            
+            if score_diff > 0:
+                reward += score_diff / 100.0  # Normalize score
             
             if lines_diff > 0:
                 reward += 2 ** lines_diff
             
-            reward -= 0.01
-            
-            if self._is_game_over():
-                reward -= 10
+            if self.turn_based:
+                if not self._is_game_over():
+                    reward += 0.1  # Small positive reward for each successful piece placement
+                
+                if self._is_game_over():
+                    reward -= 5.0  # Reduced penalty in turn-based mode
+            else:
+                reward -= 0.01  # Small step penalty
+                
+                if self._is_game_over():
+                    reward -= 10.0
             
             return reward
         except Exception as e:
             print(f"Warning: Error calculating reward: {e}")
-            return -0.01
+            return 0.0  # Neutral reward on error instead of negative
     
     def _is_game_over(self):
         """Check if the game is over."""
         
-        if self.frame_count < 30:
+        if self.frame_count < 60:
             return False
             
-        game_over = ((hasattr(self.tetris, 'game_over') and self.tetris.game_over) or 
-                     (self.tetris.score == 0 and self.tetris.level == 0 and self.frame_count > 120))
+        explicit_game_over = hasattr(self.tetris, 'game_over') and self.tetris.game_over
+        
+        score = getattr(self.tetris, 'score', 0)
+        level = getattr(self.tetris, 'level', 0)
+        
+        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 180)
+        
+        game_over = explicit_game_over or implicit_game_over
         
         if game_over and self.render_mode == "human" and self.pyboy is not None:
             self._save_game_over_screenshot()
@@ -195,6 +211,9 @@ class TetrisPyBoyEnv(gym.Env):
         action_name = "None" if action == 6 else str(self.ACTIONS[action]).split('.')[-1]
         print(f"Frame {self.frame_count}: Taking action {action_name}")
         
+        if self.turn_based:
+            print(f"[TURN-BASED] Starting new piece placement")
+            
         if self.ACTIONS[action] is not None:
             self.pyboy.send_input(self.ACTIONS[action])
             self.pyboy.tick()
