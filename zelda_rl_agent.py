@@ -29,17 +29,17 @@ class ZeldaEvalCallback(BaseCallback):
         self.results_dir = os.path.join(log_dir, "results")
         os.makedirs(self.results_dir, exist_ok=True)
         
-        self.logger = logging.getLogger("zelda_eval")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
+        self._custom_logger = logging.getLogger("zelda_eval")
+        self._custom_logger.setLevel(logging.INFO)
+        if not self._custom_logger.handlers:
             file_handler = logging.FileHandler(os.path.join(log_dir, "evaluation.log"))
             formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
             file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
+            self._custom_logger.addHandler(file_handler)
             
             console_handler = logging.StreamHandler()
             console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
+            self._custom_logger.addHandler(console_handler)
     
     def _on_step(self):
         """
@@ -65,21 +65,21 @@ class ZeldaEvalCallback(BaseCallback):
                 episode_rewards.append(episode_reward)
                 episode_lengths.append(episode_length)
                 
-                self.logger.info(f"Evaluation episode {i+1}/{self.n_eval_episodes}: "
+                self._custom_logger.info(f"Evaluation episode {i+1}/{self.n_eval_episodes}: "
                                 f"reward={episode_reward:.2f}, length={episode_length}")
             
             mean_reward = np.mean(episode_rewards)
             std_reward = np.std(episode_rewards)
             mean_length = np.mean(episode_lengths)
             
-            self.logger.info(f"Evaluation at step {self.n_calls}: "
+            self._custom_logger.info(f"Evaluation at step {self.n_calls}: "
                             f"mean_reward={mean_reward:.2f} +/- {std_reward:.2f}, "
                             f"mean_length={mean_length:.1f}")
             
             if mean_reward > self.best_mean_reward:
                 self.best_mean_reward = mean_reward
                 if self.save_path is not None:
-                    self.logger.info(f"Saving new best model to {self.save_path}")
+                    self._custom_logger.info(f"Saving new best model to {self.save_path}")
                     self.model.save(self.save_path)
             
             self.last_mean_reward = mean_reward
@@ -176,17 +176,17 @@ class ZeldaRLAgent:
         
         os.makedirs(log_dir, exist_ok=True)
         
-        self.logger = logging.getLogger("zelda_agent")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
+        self._custom_logger = logging.getLogger("zelda_agent")
+        self._custom_logger.setLevel(logging.INFO)
+        if not self._custom_logger.handlers:
             file_handler = logging.FileHandler(os.path.join(log_dir, "training.log"))
             formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
             file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
+            self._custom_logger.addHandler(file_handler)
             
             console_handler = logging.StreamHandler()
             console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
+            self._custom_logger.addHandler(console_handler)
         
         if self.env is not None:
             self._create_model()
@@ -238,7 +238,7 @@ class ZeldaRLAgent:
         else:
             raise ValueError(f"Unsupported algorithm: {self.algorithm}")
         
-        self.logger.info(f"Created {self.algorithm.upper()} model with {policy}")
+        self._custom_logger.info(f"Created {self.algorithm.upper()} model with {policy}")
     
     def train(self, total_timesteps=100000, eval_freq=10000, save_freq=10000, 
               n_eval_episodes=5, save_path=None):
@@ -258,10 +258,10 @@ class ZeldaRLAgent:
         if self.model is None:
             raise ValueError("Model not initialized. Call set_env() first.")
         
-        self.logger.info(f"Starting training for {total_timesteps} timesteps")
-        self.logger.info(f"  Algorithm: {self.algorithm}")
-        self.logger.info(f"  Evaluation frequency: {eval_freq}")
-        self.logger.info(f"  Save frequency: {save_freq}")
+        self._custom_logger.info(f"Starting training for {total_timesteps} timesteps")
+        self._custom_logger.info(f"  Algorithm: {self.algorithm}")
+        self._custom_logger.info(f"  Evaluation frequency: {eval_freq}")
+        self._custom_logger.info(f"  Save frequency: {save_freq}")
         
         eval_env = create_zelda_env(self.env.get_attr("rom_path")[0], render_mode="headless")
         
@@ -286,7 +286,7 @@ class ZeldaRLAgent:
         )
         
         self.model.save(save_path)
-        self.logger.info(f"Training completed. Final model saved to {save_path}")
+        self._custom_logger.info(f"Training completed. Final model saved to {save_path}")
         
         return self.model
     
@@ -303,7 +303,7 @@ class ZeldaRLAgent:
         if not os.path.exists(model_path):
             raise ValueError(f"Model file not found: {model_path}")
         
-        self.logger.info(f"Loading model from {model_path}")
+        self._custom_logger.info(f"Loading model from {model_path}")
         
         if self.algorithm == "ppo":
             self.model = PPO.load(model_path, env=self.env)
@@ -314,7 +314,7 @@ class ZeldaRLAgent:
         else:
             raise ValueError(f"Unsupported algorithm: {self.algorithm}")
         
-        self.logger.info(f"Model loaded successfully")
+        self._custom_logger.info(f"Model loaded successfully")
         
         return self.model
     
@@ -343,7 +343,7 @@ class ZeldaRLAgent:
         if self.model is None:
             raise ValueError("Model not initialized. Call set_env() or load() first.")
         
-        self.logger.info(f"Playing {episodes} episodes with delay={delay}s")
+        self._custom_logger.info(f"Playing {episodes} episodes with delay={delay}s")
         
         episode_rewards = []
         
@@ -354,7 +354,7 @@ class ZeldaRLAgent:
             episode_reward = 0
             step = 0
             
-            self.logger.info(f"Starting episode {i+1}/{episodes}")
+            self._custom_logger.info(f"Starting episode {i+1}/{episodes}")
             
             while not (done or truncated):
                 action, _ = self.model.predict(obs, deterministic=deterministic)
@@ -364,14 +364,14 @@ class ZeldaRLAgent:
                 step += 1
                 
                 if step % 100 == 0:
-                    self.logger.info(f"Episode {i+1}, Step {step}, Reward: {episode_reward:.2f}")
+                    self._custom_logger.info(f"Episode {i+1}, Step {step}, Reward: {episode_reward:.2f}")
                 
                 if delay > 0:
                     import time
                     time.sleep(delay)
             
             episode_rewards.append(episode_reward)
-            self.logger.info(f"Episode {i+1} completed with reward {episode_reward:.2f}")
+            self._custom_logger.info(f"Episode {i+1} completed with reward {episode_reward:.2f}")
         
         return episode_rewards
     
