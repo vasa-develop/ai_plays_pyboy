@@ -32,6 +32,10 @@ def main():
     parser.add_argument("--log-dir", default="./hybrid_logs", help="Directory to save logs")
     parser.add_argument("--render", choices=["human", "rgb_array"], default="human", 
                         help="Rendering mode")
+    parser.add_argument("--save-state", action="store_true", default=True,
+                        help="Whether to use save states to bypass title screens")
+    parser.add_argument("--save-state-path", 
+                        help="Path to save state file (default: {log_dir}/zelda_gameplay.state)")
     
     args = parser.parse_args()
     
@@ -73,6 +77,14 @@ def main():
         
         return
     
+    save_state_path = None
+    if args.save_state:
+        if args.save_state_path:
+            save_state_path = args.save_state_path
+        else:
+            save_state_path = os.path.join(args.log_dir, "zelda_gameplay.state")
+            logger.info(f"Using default save state path: {save_state_path}")
+    
     agent = HybridZeldaAgent(
         rom_path=args.rom,
         rl_model_path=args.rl_model,
@@ -80,6 +92,10 @@ def main():
         log_dir=args.log_dir,
         render_mode=args.render
     )
+    
+    if save_state_path and args.save_state:
+        logger.info(f"Using save state: {save_state_path}")
+        agent.env.env_method("update_save_state_path", save_state_path)
     
     try:
         if args.mode == "train":

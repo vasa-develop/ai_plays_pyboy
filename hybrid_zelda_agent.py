@@ -52,7 +52,11 @@ class HybridZeldaAgent:
             console_handler.setFormatter(formatter)
             self.logger.addHandler(console_handler)
 
-        self.env = create_zelda_env(rom_path, render_mode=render_mode)
+        self.env = create_zelda_env(
+            rom_path, 
+            render_mode=render_mode,
+            save_state_path=os.path.join(log_dir, "zelda_gameplay.state")
+        )
 
         self.rl_agent = ZeldaRLAgent(
             env=self.env,
@@ -205,27 +209,70 @@ class HybridZeldaAgent:
                 return None
 
         if not hasattr(self, '_game_started'):
-            self._game_started = False
-            self._gameplay_frames = 0
-            self._title_screen_detected = True
+            self._game_started = True
             self._dialogue_buffer = []
             self._dialogue_stable_count = 0
             self._last_dialogue = None
-
-        if not self._game_started:
-            self._gameplay_frames += 1
-            if self._gameplay_frames < 200:
-                return None
-            else:
-                self._game_started = True
-
-        is_dialogue_frame = False
-        dialogue_text = None
-
-        is_title_or_loading_screen = False
-
+            self._gameplay_frames = 0
+            self._last_screen_state = None
+            self._screen_stable_count = 0
+            self._in_gameplay = True
+            self._loading_screen_count = 0
+            
+        self._gameplay_frames += 1
+            
+        screen_data = None
+        if 'screen' in observation and observation['screen'] is not None:
+            screen_data = observation['screen']
+            
+        is_title_or_loading_screen = True  # Default to true until proven otherwise
+        
+        if screen_data is not None:
+            if hasattr(self, '_last_screen_state') and self._last_screen_state is not None:
+                if isinstance(screen_data, np.ndarray) and isinstance(self._last_screen_state, np.ndarray):
+                    try:
+                        if screen_data.shape == self._last_screen_state.shape:
+                            screen_diff = np.mean(np.abs(screen_data - self._last_screen_state))
+                            
+                            if screen_diff < 0.05:  # Very little change
+                                self._screen_stable_count += 1
+                                if self._screen_stable_count > 30:  # If stable for 30 frames
+                                    is_title_or_loading_screen = True
+                                    if self._gameplay_frames % 60 == 0:  # Log every second
+                                        self.logger.info(f"Detected loading/title screen (stable screen)")
+                            else:
+                                self._screen_stable_count = 0
+                                
+                                if self._in_gameplay and self._gameplay_frames > 1000:
+                                    is_title_or_loading_screen = False
+                    except Exception as e:
+                        self.logger.warning(f"Error comparing screens: {e}")
+            
+            self._last_screen_state = screen_data
+            
+        if 'health' in observation and observation['health'] > 0:
+            if 'position' in observation and not np.array_equal(observation['position'], np.array([0, 0])):
+                self._in_gameplay = True
+                is_title_or_loading_screen = False
+                
+        if is_title_or_loading_screen:
+            self._loading_screen_count += 1
+            if self._loading_screen_count % 60 == 0:  # Log every ~60 frames
+                self.logger.info(f"Still detecting loading/title screen (frame {self._gameplay_frames})")
+        else:
+            if self._loading_screen_count > 0:
+                self.logger.info(f"Exited loading/title screen after {self._loading_screen_count} frames")
+            self._loading_screen_count = 0
+                
         if is_title_or_loading_screen:
             return None
+            
+        if not self._game_started:
+            self._game_started = True
+            self.logger.info("Game has started, beginning dialogue detection")
+            
+        is_dialogue_frame = False
+        dialogue_text = None
 
         if is_dialogue_frame and dialogue_text:
             if not hasattr(self, '_dialogue_buffer'):

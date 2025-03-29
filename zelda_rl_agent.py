@@ -134,19 +134,20 @@ class ZeldaEvalCallback(BaseCallback):
         plt.savefig(os.path.join(self.results_dir, f"eval_step_{self.n_calls}.png"))
         plt.close()
 
-def create_zelda_env(rom_path, render_mode="headless"):
+def create_zelda_env(rom_path, render_mode="headless", save_state_path=None):
     """
     Create a Zelda environment with appropriate wrappers.
     
     Args:
         rom_path: Path to the Zelda ROM file
         render_mode: Whether to render the game (human) or not (headless)
+        save_state_path: Path to the save state file (optional)
         
     Returns:
         Vectorized environment for training
     """
     def make_env():
-        env = ZeldaPyBoyEnv(rom_path=rom_path, render_mode=render_mode)
+        env = ZeldaPyBoyEnv(rom_path=rom_path, render_mode=render_mode, save_state_path=save_state_path)
         env = Monitor(env)
         return env
     

@@ -1,6 +1,8 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+import os
+import logging
 from pyboy import PyBoy
 from pyboy.utils import WindowEvent
 
@@ -36,11 +38,12 @@ class ZeldaPyBoyEnv(gym.Env):
         None,
     ]
     
-    def __init__(self, rom_path="zelda.gb", render_mode="human"):
+    def __init__(self, rom_path="zelda.gb", render_mode="human", save_state_path=None):
         super(ZeldaPyBoyEnv, self).__init__()
         
         self.rom_path = rom_path
         self.render_mode = render_mode
+        self.save_state_path = save_state_path
         self.pyboy = None
         self.frame_count = 0
         self.max_frames_per_episode = 100000  # Limit episode length
@@ -238,22 +241,25 @@ class ZeldaPyBoyEnv(gym.Env):
             self.pyboy.stop()
             raise ValueError("The provided ROM is not Zelda: Link's Awakening")
         
-        for _ in range(60):
-            self.pyboy.tick()
-        
-        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
-        self.pyboy.tick()
-        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
-        
-        for _ in range(60):
-            self.pyboy.tick()
-        
-        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
-        self.pyboy.tick()
-        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
-        
-        for _ in range(60):
-            self.pyboy.tick()
+        if self.save_state_path and os.path.exists(self.save_state_path):
+            try:
+                with open(self.save_state_path, "rb") as file:
+                    self.pyboy.load_state(file)
+                logging.info(f"Loaded game state from {self.save_state_path}")
+            except Exception as e:
+                logging.warning(f"Failed to load save state: {e}. Falling back to title screen skip.")
+                self._skip_title_screen()
+        else:
+            self._skip_title_screen()
+            
+            if self.save_state_path:
+                try:
+                    os.makedirs(os.path.dirname(os.path.abspath(self.save_state_path)), exist_ok=True)
+                    with open(self.save_state_path, "wb") as file:
+                        self.pyboy.save_state(file)
+                    logging.info(f"Saved game state to {self.save_state_path}")
+                except Exception as e:
+                    logging.warning(f"Failed to save state: {e}")
         
         self.frame_count = 0
         self.prev_health = self._get_health()
@@ -283,6 +289,41 @@ class ZeldaPyBoyEnv(gym.Env):
         This method is included for compatibility with the Gym interface.
         """
         pass
+    
+    def _skip_title_screen(self):
+        """
+        Skip the title screen by pressing the START button twice.
+        This is used as a fallback when save state loading fails or isn't available.
+        """
+        logging.info("Skipping title screen manually...")
+        
+        for _ in range(60):
+            self.pyboy.tick()
+        
+        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+        self.pyboy.tick()
+        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+        
+        for _ in range(60):
+            self.pyboy.tick()
+        
+        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+        self.pyboy.tick()
+        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+        
+        for _ in range(60):
+            self.pyboy.tick()
+    
+    def update_save_state_path(self, save_state_path):
+        """
+        Update the save state path after environment creation.
+        
+        Args:
+            save_state_path: Path to the save state file
+        """
+        self.save_state_path = save_state_path
+        logging.info(f"Updated save state path to: {save_state_path}")
+        return True
     
     def close(self):
         """Clean up resources."""
