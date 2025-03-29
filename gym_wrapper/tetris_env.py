@@ -396,10 +396,20 @@ class TetrisPyBoyEnv(gym.Env):
         
         self.tetris = self.pyboy.game_wrapper
         
+        print("[INIT] Starting game and skipping loading screens...")
         self.tetris.start_game(timer_div=0x00)
+        
+        for _ in range(120):
+            self.pyboy.tick()
+            
+        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+        self.pyboy.tick()
+        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
         
         for _ in range(60):
             self.pyboy.tick()
+            
+        print("[INIT] Game initialized and ready to play")
         
         self.prev_score = 0
         self.prev_lines = 0
