@@ -16,17 +16,29 @@ class TetrisStatePreprocessor:
         
         Args:
             observation: Dictionary containing 'board', 'current_piece', and 'next_piece'
+                         or a numpy array if coming from a vectorized environment
             
         Returns:
             Processed observation with additional features
         """
-        board = observation['board']
-        next_piece = observation['next_piece']
+        if isinstance(observation, dict):
+            board = observation['board']
+            next_piece = observation.get('next_piece', np.zeros(7, dtype=np.int8))
+        elif isinstance(observation, np.ndarray) and observation.ndim >= 2:
+            board = observation
+            next_piece = np.zeros(7, dtype=np.int8)
+        else:
+            print(f"Warning: Unknown observation format: {type(observation)}")
+            board = np.zeros((18, 10), dtype=np.int8)
+            next_piece = np.zeros(7, dtype=np.int8)
         
         height_profile = self._get_height_profile(board)
         holes = self._count_holes(board, height_profile)
         bumpiness = self._calculate_bumpiness(height_profile)
         aggregated_height = sum(height_profile)
+        
+        if not isinstance(next_piece, np.ndarray) or next_piece.shape[0] != 7:
+            next_piece = np.zeros(7, dtype=np.int8)
         
         features = np.concatenate([
             height_profile,                # Column heights (10 features)
@@ -105,15 +117,26 @@ class TetrisStatePreprocessor:
         Extract additional reward features based on state transitions.
         
         Args:
-            observation: Previous observation
-            next_observation: Current observation
+            observation: Previous observation (dict or numpy array)
+            next_observation: Current observation (dict or numpy array)
             reward: Raw reward from the environment
             
         Returns:
             Enhanced reward based on state features
         """
-        prev_board = observation['board']
-        next_board = next_observation['board']
+        if isinstance(observation, dict):
+            prev_board = observation['board']
+        elif isinstance(observation, np.ndarray) and observation.ndim >= 2:
+            prev_board = observation
+        else:
+            prev_board = np.zeros((18, 10), dtype=np.int8)
+            
+        if isinstance(next_observation, dict):
+            next_board = next_observation['board']
+        elif isinstance(next_observation, np.ndarray) and next_observation.ndim >= 2:
+            next_board = next_observation
+        else:
+            next_board = np.zeros((18, 10), dtype=np.int8)
         
         prev_height_profile = self._get_height_profile(prev_board)
         next_height_profile = self._get_height_profile(next_board)
