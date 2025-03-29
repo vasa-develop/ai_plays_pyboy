@@ -59,7 +59,7 @@ def test_game_initialization():
             start_game_called and
             start_button_pressed and
             start_button_released and
-            tick_count == 181  # 120 frames + 1 frame for button press + 60 more frames
+            tick_count == 273  # 120 + 1 + 60 + 1 + 30 + 1 + 60 frames
         )
         
         print(f"[TEST] Initialization sequence correct: {'PASSED' if initialization_correct else 'FAILED'}")
@@ -68,8 +68,8 @@ def test_game_initialization():
             print("[TEST] FAILED: start_game was not called")
         if not start_button_pressed or not start_button_released:
             print("[TEST] FAILED: START button was not pressed or released")
-        if tick_count != 181:
-            print(f"[TEST] FAILED: Expected 181 ticks, got {tick_count}")
+        if tick_count != 273:
+            print(f"[TEST] FAILED: Expected 273 ticks, got {tick_count}")
 
 if __name__ == "__main__":
     test_game_initialization()

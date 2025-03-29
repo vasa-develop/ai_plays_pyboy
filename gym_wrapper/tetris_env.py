@@ -157,7 +157,8 @@ class TetrisPyBoyEnv(gym.Env):
     def _is_game_over(self):
         """Check if the game is over."""
         
-        if self.frame_count < 120:
+        if self.frame_count < 300:  # Increased from 120 to 300 to ensure we're past all loading screens
+            print(f"[GAME_OVER] Skipping check during initialization (frame {self.frame_count})")
             return False
             
         explicit_game_over = hasattr(self.tetris, 'game_over') and self.tetris.game_over
@@ -165,23 +166,35 @@ class TetrisPyBoyEnv(gym.Env):
         game_over_screen = False
         try:
             if self.pyboy is not None:
-                screen_buffer = self.pyboy.screen_ndarray()
-                if screen_buffer is not None:
-                    center_region = screen_buffer[120:300, 80:240]
-                    white_pixels = np.sum(center_region > 200)
-                    if white_pixels > 500:  # Threshold for detecting white text
-                        game_over_screen = True
-                        print("[GAME_OVER] Detected game over screen")
+                screen = self.pyboy.screen
+                if hasattr(screen, 'ndarray'):
+                    screen_buffer = screen.ndarray
+                    if callable(screen_buffer):
+                        screen_buffer = screen_buffer()
+                    
+                    if screen_buffer is not None:
+                        center_region = screen_buffer[120:300, 80:240]
+                        
+                        white_pixels = np.sum(center_region > 200)
+                        
+                        black_pixels = np.sum(center_region < 50)
+                        white_to_black_ratio = white_pixels / (black_pixels + 1)  # Avoid division by zero
+                        
+                        print(f"[GAME_OVER] Screen analysis: white={white_pixels}, black={black_pixels}, ratio={white_to_black_ratio:.2f}")
+                        
+                        if white_pixels > 500 and white_pixels < 10000:  # Relaxed upper bound
+                            game_over_screen = True
+                            print("[GAME_OVER] Detected game over screen")
         except Exception as e:
             print(f"Warning: Error checking game over screen: {e}")
         
         score = getattr(self.tetris, 'score', 0)
         level = getattr(self.tetris, 'level', 0)
         
-        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 600)
+        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 1000)  # Increased from 600 to 1000
         
         board = self._get_observation()['board']
-        top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows instead of 4
+        top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows
         
         game_over = explicit_game_over or game_over_screen or implicit_game_over or top_rows_filled
         
@@ -200,8 +213,17 @@ class TetrisPyBoyEnv(gym.Env):
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"game_over_screenshots/game_over_{timestamp}_frame{self.frame_count}.png"
             
-            self.pyboy.screen_image().save(filename)
-            print(f"Game over screenshot saved to {filename}")
+            screen = self.pyboy.screen
+            if hasattr(screen, 'image'):
+                img_func = screen.image
+                if callable(img_func):
+                    img = img_func()
+                else:
+                    img = img_func
+                img.save(filename)
+                print(f"Game over screenshot saved to {filename}")
+            else:
+                print("Failed to save game over screenshot: screen.image not available")
         except Exception as e:
             print(f"Failed to save game over screenshot: {e}")
     
@@ -397,18 +419,47 @@ class TetrisPyBoyEnv(gym.Env):
         self.tetris = self.pyboy.game_wrapper
         
         print("[INIT] Starting game and skipping loading screens...")
-        self.tetris.start_game(timer_div=0x00)
         
-        for _ in range(120):
+        self.tetris.start_game(timer_div=0x00)
+        print("[INIT] Called start_game(timer_div=0x00)")
+        
+        print("[INIT] Advancing 120 frames...")
+        for i in range(120):
             self.pyboy.tick()
-            
+            if i % 30 == 0:
+                print(f"[INIT] Advanced {i} frames")
+        
+        print("[INIT] Pressing START button...")
         self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
         self.pyboy.tick()
         self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
         
-        for _ in range(60):
+        print("[INIT] Advancing 60 frames...")
+        for i in range(60):
             self.pyboy.tick()
-            
+            if i % 20 == 0:
+                print(f"[INIT] Advanced {i} more frames")
+        
+        print("[INIT] Pressing START button again...")
+        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+        self.pyboy.tick()
+        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+        
+        print("[INIT] Advancing 30 frames...")
+        for i in range(30):
+            self.pyboy.tick()
+        
+        print("[INIT] Pressing A button to select game type...")
+        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
+        self.pyboy.tick()
+        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
+        
+        print("[INIT] Advancing 60 final frames...")
+        for i in range(60):
+            self.pyboy.tick()
+            if i % 20 == 0:
+                print(f"[INIT] Advanced {i} final frames")
+        
         print("[INIT] Game initialized and ready to play")
         
         self.prev_score = 0
