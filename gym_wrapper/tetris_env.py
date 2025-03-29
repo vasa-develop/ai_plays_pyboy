@@ -1,6 +1,8 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+import os
+import datetime
 from pyboy import PyBoy
 from pyboy.utils import WindowEvent
 
@@ -115,8 +117,26 @@ class TetrisPyBoyEnv(gym.Env):
         if self.frame_count < 30:
             return False
             
-        return ((hasattr(self.tetris, 'game_over') and self.tetris.game_over) or 
-                (self.tetris.score == 0 and self.tetris.level == 0 and self.frame_count > 120))
+        game_over = ((hasattr(self.tetris, 'game_over') and self.tetris.game_over) or 
+                     (self.tetris.score == 0 and self.tetris.level == 0 and self.frame_count > 120))
+        
+        if game_over and self.render_mode == "human" and self.pyboy is not None:
+            self._save_game_over_screenshot()
+            
+        return game_over
+        
+    def _save_game_over_screenshot(self):
+        """Save a screenshot when game over is detected for debugging."""
+        try:
+            os.makedirs("game_over_screenshots", exist_ok=True)
+            
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"game_over_screenshots/game_over_{timestamp}_frame{self.frame_count}.png"
+            
+            self.pyboy.screen_image().save(filename)
+            print(f"Game over screenshot saved to {filename}")
+        except Exception as e:
+            print(f"Failed to save game over screenshot: {e}")
     
     def step(self, action):
         """
