@@ -22,8 +22,12 @@ def train_tetris_agent():
                         help="Path to pre-trained model to continue training")
     parser.add_argument("--render", action="store_true", 
                         help="Render the game during training")
-    parser.add_argument("--turn-based", action="store_true",
-                        help="Use turn-based gameplay mode instead of continuous mode")
+    parser.add_argument("--turn-based", action="store_true", default=False,
+                        help="Use turn-based gameplay mode instead of continuous mode (default: False)")
+    parser.add_argument("--delay", type=float, default=0.0,
+                        help="Delay between frames in seconds (useful for visualization)")
+    parser.add_argument("--emulation-speed", type=int, default=0,
+                        help="Emulation speed (0=unlimited, 1=normal, 2=2x, etc.)")
     args = parser.parse_args()
     
     logging.basicConfig(
@@ -57,7 +61,13 @@ def train_tetris_agent():
     
     try:
         render_mode = "human" if args.render else "headless"
-        env = create_tetris_env(args.rom, render_mode=render_mode, turn_based=args.turn_based)
+        env = create_tetris_env(
+            rom_path=args.rom, 
+            render_mode=render_mode, 
+            turn_based=args.turn_based,
+            emulation_speed=args.emulation_speed,
+            frame_delay=args.delay
+        )
         
         agent = TetrisRLAgent(
             env=env,

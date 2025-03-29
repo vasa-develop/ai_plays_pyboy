@@ -21,7 +21,11 @@ def evaluate_tetris_agent():
     parser.add_argument("--save-video", action="store_true", 
                         help="Save video of gameplay (not implemented yet)")
     parser.add_argument("--delay", type=float, default=0.0, 
-                        help="Delay between moves in seconds (for streaming)")
+                        help="Delay between moves in seconds (for visualization)")
+    parser.add_argument("--turn-based", action="store_true", default=False,
+                        help="Use turn-based gameplay mode instead of continuous mode (default: False)")
+    parser.add_argument("--emulation-speed", type=int, default=0,
+                        help="Emulation speed (0=unlimited, 1=normal, 2=2x, etc.)")
     args = parser.parse_args()
     
     logging.basicConfig(
@@ -54,7 +58,13 @@ def evaluate_tetris_agent():
     
     try:
         render_mode = "human" if args.render else "headless"
-        env = create_tetris_env(args.rom, render_mode=render_mode)
+        env = create_tetris_env(
+            rom_path=args.rom, 
+            render_mode=render_mode, 
+            turn_based=args.turn_based,
+            emulation_speed=args.emulation_speed,
+            frame_delay=args.delay
+        )
         
         agent = TetrisRLAgent(
             env=env,

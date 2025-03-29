@@ -34,12 +34,14 @@ class TetrisPyBoyEnv(gym.Env):
         None,
     ]
     
-    def __init__(self, rom_path="tetris.gb", render_mode="human", turn_based=True):
+    def __init__(self, rom_path="tetris.gb", render_mode="human", turn_based=True, emulation_speed=0, frame_delay=0.0):
         super(TetrisPyBoyEnv, self).__init__()
         
         self.rom_path = rom_path
         self.render_mode = render_mode
         self.turn_based = turn_based  # Turn-based mode flag
+        self.emulation_speed = emulation_speed  # Control emulation speed (0 = unlimited, 1 = normal, 2 = 2x, etc.)
+        self.frame_delay = frame_delay  # Additional delay between frames in seconds
         self.pyboy = None
         self.tetris = None
         self.prev_score = 0
@@ -100,7 +102,7 @@ class TetrisPyBoyEnv(gym.Env):
             return None
     
     def _calculate_reward(self):
-        """Calculate the reward based on score and lines cleared."""
+        """Calculate the reward based on score, lines cleared, and game state."""
         try:
             current_score = getattr(self.tetris, 'score', 0)
             current_lines = getattr(self.tetris, 'lines', 0)
@@ -115,22 +117,42 @@ class TetrisPyBoyEnv(gym.Env):
             
             if score_diff > 0:
                 reward += score_diff / 100.0  # Normalize score
+                print(f"[REWARD] +{score_diff/100.0:.2f} for score increase of {score_diff}")
             
             if lines_diff > 0:
-                reward += 2 ** lines_diff
+                line_reward = 2 ** lines_diff
+                reward += line_reward
+                print(f"[REWARD] +{line_reward:.2f} for clearing {lines_diff} lines")
             
             if self.turn_based:
                 if not self._is_game_over():
                     reward += 0.1  # Small positive reward for each successful piece placement
+                    print(f"[REWARD] +0.1 for successful piece placement")
                 
                 if self._is_game_over():
                     reward -= 5.0  # Reduced penalty in turn-based mode
+                    print(f"[REWARD] -5.0 for game over")
             else:
-                reward -= 0.01  # Small step penalty
+                step_penalty = 0.01
+                reward -= step_penalty
+                print(f"[REWARD] -{step_penalty:.2f} step penalty (continuous mode)")
+                
+                board = self._get_observation()['board']
+                board_sum = np.sum(board)
+                
+                if self.frame_count % 15 == 0:  # Periodically check for piece lock
+                    is_locked = self._is_piece_locked()
+                    if is_locked:
+                        placement_reward = 0.5
+                        reward += placement_reward
+                        print(f"[REWARD] +{placement_reward:.2f} for piece placement (continuous mode)")
                 
                 if self._is_game_over():
-                    reward -= 10.0
+                    game_over_penalty = 10.0
+                    reward -= game_over_penalty
+                    print(f"[REWARD] -{game_over_penalty:.2f} for game over")
             
+            print(f"[REWARD] Total reward: {reward:.2f}")
             return reward
         except Exception as e:
             print(f"Warning: Error calculating reward: {e}")
@@ -147,15 +169,17 @@ class TetrisPyBoyEnv(gym.Env):
         score = getattr(self.tetris, 'score', 0)
         level = getattr(self.tetris, 'level', 0)
         
-        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 300)
+        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 600)
         
         board = self._get_observation()['board']
-        top_rows_filled = np.sum(board[0:4, :]) > 15  # If more than 15 cells in top 4 rows are filled
+        top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows instead of 4
         
         game_over = explicit_game_over or implicit_game_over or top_rows_filled
         
-        if game_over and self.render_mode == "human" and self.pyboy is not None:
-            self._save_game_over_screenshot()
+        if game_over:
+            print(f"[GAME_OVER] Detected: explicit={explicit_game_over}, implicit={implicit_game_over}, top_rows={top_rows_filled}")
+            if self.render_mode == "human" and self.pyboy is not None:
+                self._save_game_over_screenshot()
             
         return game_over
         
@@ -243,6 +267,11 @@ class TetrisPyBoyEnv(gym.Env):
             self.pyboy.tick()
             self.pyboy.send_input(self.RELEASE_ACTIONS[action])
             self.frame_count += 1
+            
+            if self.frame_delay > 0:
+                import time
+                time.sleep(self.frame_delay)
+                print(f"[DELAY] Applied {self.frame_delay}s delay after action")
         else:
             print("[ACTION] No input sent (None action)")
         
@@ -276,9 +305,20 @@ class TetrisPyBoyEnv(gym.Env):
             else:
                 print(f"[TURN-BASED] Piece lock timeout after {frames_since_action} frames")
         else:
-            for _ in range(5):
+            frames_to_advance = 5  # Default number of frames to advance
+            
+            print(f"[CONTINUOUS] Advancing {frames_to_advance} frames after action")
+            for i in range(frames_to_advance):
                 self.pyboy.tick()
                 self.frame_count += 1
+                
+                if self.frame_delay > 0:
+                    import time
+                    time.sleep(self.frame_delay / frames_to_advance)
+                    
+            is_locked = self._is_piece_locked() if self.frame_count % 15 == 0 else False
+            if is_locked:
+                print("[CONTINUOUS] Piece has locked in place after advancing frames")
         
         observation = self._get_observation()
         reward = self._calculate_reward()
@@ -332,12 +372,13 @@ class TetrisPyBoyEnv(gym.Env):
         
         if self.turn_based:
             print("[TURN-BASED] Activating turn-based mode")
-            self.pyboy.set_emulation_speed(0)
-            print("[TURN-BASED] Emulation speed set to 0 (manual stepping)")
+            self.pyboy.set_emulation_speed(self.emulation_speed)
+            print(f"[TURN-BASED] Emulation speed set to {self.emulation_speed}")
         else:
             print("[CONTINUOUS] Using continuous mode")
-            self.pyboy.set_emulation_speed(4)
-            print("[CONTINUOUS] Emulation speed set to 4")
+            speed = self.emulation_speed if self.emulation_speed > 0 else 4
+            self.pyboy.set_emulation_speed(speed)
+            print(f"[CONTINUOUS] Emulation speed set to {speed}")
         
         if not self.pyboy.cartridge_title or "TETRIS" not in self.pyboy.cartridge_title.upper():
             print(f"Warning: ROM title '{self.pyboy.cartridge_title}' may not be Tetris, but continuing anyway")
