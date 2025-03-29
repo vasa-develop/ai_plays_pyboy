@@ -197,17 +197,21 @@ class TetrisPyBoyEnv(gym.Env):
         except Exception as e:
             print(f"Warning: Error accessing tilemap_background: {e}")
         
-        board = self._get_observation()['board']
-        top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows
-        
-        if top_rows_filled:
-            print("[GAME_OVER] Detected via top rows filled")
-            if self.render_mode == "human" and self.pyboy is not None:
-                self._save_game_over_screenshot()
-            return True
+        try:
+            board = self._get_observation()['board']
+            top_row_threshold = 12 if is_tetris_dx else 10
+            top_rows_filled = np.sum(board[0:2, :]) > top_row_threshold
+            
+            if top_rows_filled:
+                print("[GAME_OVER] Detected via top rows filled")
+                if self.render_mode == "human" and self.pyboy is not None:
+                    self._save_game_over_screenshot()
+                return True
+        except Exception as e:
+            print(f"Warning: Error checking top rows: {e}")
         
         try:
-            if self.pyboy is not None and self.frame_count > 1000:  # Only use screen detection after significant gameplay
+            if self.pyboy is not None and self.frame_count > init_threshold + 100:
                 screen = self.pyboy.screen
                 if hasattr(screen, 'ndarray'):
                     screen_buffer = screen.ndarray
@@ -215,31 +219,50 @@ class TetrisPyBoyEnv(gym.Env):
                         screen_buffer = screen_buffer()
                     
                     if screen_buffer is not None:
-                        center_region = screen_buffer[120:300, 80:240]
-                        
-                        white_pixels = np.sum(center_region > 200)
-                        black_pixels = np.sum(center_region < 50)
-                        white_to_black_ratio = white_pixels / (black_pixels + 1)  # Avoid division by zero
-                        
-                        print(f"[GAME_OVER] Screen analysis: white={white_pixels}, black={black_pixels}, ratio={white_to_black_ratio:.2f}")
-                        
-                        if (white_pixels > 500 and white_pixels < 5000 and 
-                            white_to_black_ratio > 0.05 and white_to_black_ratio < 0.3):
-                            print("[GAME_OVER] Detected via screen analysis")
-                            if self.render_mode == "human" and self.pyboy is not None:
-                                self._save_game_over_screenshot()
-                            return True
+                        if is_tetris_dx:
+                            center_region = screen_buffer[140:280, 100:220]
+                            white_pixels = np.sum(center_region > 200)
+                            black_pixels = np.sum(center_region < 50)
+                            white_to_black_ratio = white_pixels / (black_pixels + 1)
+                            
+                            print(f"[GAME_OVER] Screen analysis (DX): white={white_pixels}, black={black_pixels}, ratio={white_to_black_ratio:.2f}")
+                            
+                            if (white_pixels > 800 and white_pixels < 8000 and 
+                                white_to_black_ratio > 0.4 and white_to_black_ratio < 3.0):
+                                print("[GAME_OVER] Detected via screen analysis (DX)")
+                                if self.render_mode == "human" and self.pyboy is not None:
+                                    self._save_game_over_screenshot()
+                                return True
+                        else:
+                            center_region = screen_buffer[120:300, 80:240]
+                            white_pixels = np.sum(center_region > 200)
+                            black_pixels = np.sum(center_region < 50)
+                            white_to_black_ratio = white_pixels / (black_pixels + 1)
+                            
+                            print(f"[GAME_OVER] Screen analysis: white={white_pixels}, black={black_pixels}, ratio={white_to_black_ratio:.2f}")
+                            
+                            if (white_pixels > 500 and white_pixels < 5000 and 
+                                white_to_black_ratio > 0.05 and white_to_black_ratio < 0.3):
+                                print("[GAME_OVER] Detected via screen analysis")
+                                if self.render_mode == "human" and self.pyboy is not None:
+                                    self._save_game_over_screenshot()
+                                return True
         except Exception as e:
             print(f"Warning: Error checking game over screen: {e}")
         
-        score = getattr(self.tetris, 'score', 0)
-        level = getattr(self.tetris, 'level', 0)
-        
-        if score == 0 and level == 0 and self.frame_count > 1500:  # Increased threshold
-            print("[GAME_OVER] Detected via implicit score/level check")
-            if self.render_mode == "human" and self.pyboy is not None:
-                self._save_game_over_screenshot()
-            return True
+        try:
+            score = getattr(self.tetris, 'score', 0)
+            level = getattr(self.tetris, 'level', 0)
+            
+            implicit_threshold = 2000 if is_tetris_dx else 1500
+            
+            if score == 0 and level == 0 and self.frame_count > implicit_threshold:
+                print("[GAME_OVER] Detected via implicit score/level check")
+                if self.render_mode == "human" and self.pyboy is not None:
+                    self._save_game_over_screenshot()
+                return True
+        except Exception as e:
+            print(f"Warning: Error checking score/level: {e}")
         
         return False
         
