@@ -265,9 +265,8 @@ class TetrisPyBoyEnv(gym.Env):
         else:
             self.pyboy.set_emulation_speed(4)
         
-        if self.pyboy.cartridge_title != "TETRIS":
-            self.pyboy.stop()
-            raise ValueError("The provided ROM is not Tetris")
+        if not self.pyboy.cartridge_title or "TETRIS" not in self.pyboy.cartridge_title.upper():
+            print(f"Warning: ROM title '{self.pyboy.cartridge_title}' may not be Tetris, but continuing anyway")
         
         self.tetris = self.pyboy.game_wrapper
         
