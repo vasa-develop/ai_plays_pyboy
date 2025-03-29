@@ -157,13 +157,25 @@ class TetrisPyBoyEnv(gym.Env):
     def _is_game_over(self):
         """Check if the game is over."""
         
-        if self.frame_count < 300:  # Increased from 120 to 300 to ensure we're past all loading screens
+        if self.frame_count < 300:  # Ensure we're past all loading screens
             print(f"[GAME_OVER] Skipping check during initialization (frame {self.frame_count})")
             return False
-            
-        explicit_game_over = hasattr(self.tetris, 'game_over') and self.tetris.game_over
         
-        game_over_screen = False
+        if hasattr(self.tetris, 'game_over') and self.tetris.game_over:
+            print("[GAME_OVER] Detected via PyBoy's built-in game_over attribute")
+            if self.render_mode == "human" and self.pyboy is not None:
+                self._save_game_over_screenshot()
+            return True
+        
+        board = self._get_observation()['board']
+        top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows
+        
+        if top_rows_filled:
+            print("[GAME_OVER] Detected via top rows filled")
+            if self.render_mode == "human" and self.pyboy is not None:
+                self._save_game_over_screenshot()
+            return True
+        
         try:
             if self.pyboy is not None:
                 screen = self.pyboy.screen
@@ -182,28 +194,26 @@ class TetrisPyBoyEnv(gym.Env):
                         
                         print(f"[GAME_OVER] Screen analysis: white={white_pixels}, black={black_pixels}, ratio={white_to_black_ratio:.2f}")
                         
-                        if white_pixels > 500 and white_pixels < 10000:  # Relaxed upper bound
-                            game_over_screen = True
-                            print("[GAME_OVER] Detected game over screen")
+                        if (white_pixels > 500 and white_pixels < 5000 and 
+                            white_to_black_ratio > 0.05 and white_to_black_ratio < 0.3 and
+                            self.frame_count > 1000):  # Only use screen detection after significant gameplay
+                            print("[GAME_OVER] Detected via screen analysis")
+                            if self.render_mode == "human" and self.pyboy is not None:
+                                self._save_game_over_screenshot()
+                            return True
         except Exception as e:
             print(f"Warning: Error checking game over screen: {e}")
         
         score = getattr(self.tetris, 'score', 0)
         level = getattr(self.tetris, 'level', 0)
         
-        implicit_game_over = (score == 0 and level == 0 and self.frame_count > 1000)  # Increased from 600 to 1000
-        
-        board = self._get_observation()['board']
-        top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows
-        
-        game_over = explicit_game_over or game_over_screen or implicit_game_over or top_rows_filled
-        
-        if game_over:
-            print(f"[GAME_OVER] Detected: explicit={explicit_game_over}, screen={game_over_screen}, implicit={implicit_game_over}, top_rows={top_rows_filled}")
+        if score == 0 and level == 0 and self.frame_count > 1500:  # Increased threshold
+            print("[GAME_OVER] Detected via implicit score/level check")
             if self.render_mode == "human" and self.pyboy is not None:
                 self._save_game_over_screenshot()
-            
-        return game_over
+            return True
+        
+        return False
         
     def _save_game_over_screenshot(self):
         """Save a screenshot when game over is detected for debugging."""
