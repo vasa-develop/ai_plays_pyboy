@@ -1,0 +1,433 @@
+import os
+import logging
+import numpy as np
+import json
+from typing import Dict, List, Any, Optional, Tuple, Union
+from stable_baselines3 import PPO
+from zelda_rl_agent import ZeldaRLAgent, create_zelda_env
+from llm_integration import LLMIntegration
+
+class HybridZeldaAgent:
+    """
+    Hybrid agent for playing Zelda: Link's Awakening that combines
+    reinforcement learning with LLM guidance for complex game mechanics
+    and dialogue-based progression.
+    """
+    
+    def __init__(
+        self,
+        rom_path: str = "zelda.gbc",
+        rl_model_path: Optional[str] = None,
+        llm_api_key: Optional[str] = None,
+        llm_model: str = "openai/gpt-4-turbo",
+        log_dir: str = "./zelda_hybrid_logs",
+        render_mode: str = "human"
+    ):
+        """
+        Initialize the hybrid Zelda agent.
+        
+        Args:
+            rom_path: Path to the Zelda ROM file
+            rl_model_path: Path to a pre-trained RL model (optional)
+            llm_api_key: API key for OpenRouter (optional)
+            llm_model: LLM model to use
+            log_dir: Directory to save logs
+            render_mode: Rendering mode for the environment
+        """
+        self.rom_path = rom_path
+        self.log_dir = log_dir
+        self.render_mode = render_mode
+        
+        os.makedirs(log_dir, exist_ok=True)
+        
+        self.logger = logging.getLogger("hybrid_zelda_agent")
+        self.logger.setLevel(logging.INFO)
+        if not self.logger.handlers:
+            file_handler = logging.FileHandler(os.path.join(log_dir, "hybrid_agent.log"))
+            formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+            
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
+        
+        self.env = create_zelda_env(rom_path, render_mode=render_mode)
+        
+        self.rl_agent = ZeldaRLAgent(
+            env=self.env,
+            algorithm="ppo",
+            model_path=rl_model_path,
+            log_dir=os.path.join(log_dir, "rl_logs")
+        )
+        
+        self.llm = LLMIntegration(
+            api_key=llm_api_key or os.environ.get("OPENROUTER_API_KEY"),
+            model=llm_model,
+            log_dir=os.path.join(log_dir, "llm_logs")
+        )
+        
+        self.current_plan = []
+        self.game_history = []
+        self.dialogue_history = []
+        self.current_objective = "Start the game and find the sword"
+        
+        self.logger.info(f"Hybrid Zelda Agent initialized with ROM: {rom_path}")
+        if rl_model_path:
+            self.logger.info(f"Using pre-trained RL model: {rl_model_path}")
+    
+    def train_rl_component(self, total_timesteps: int = 100000, eval_freq: int = 10000, 
+                          save_freq: int = 10000, n_eval_episodes: int = 5):
+        """
+        Train the RL component of the hybrid agent.
+        
+        Args:
+            total_timesteps: Total number of timesteps to train for
+            eval_freq: Frequency of evaluation during training
+            save_freq: Frequency of saving model checkpoints
+            n_eval_episodes: Number of episodes to evaluate on
+            
+        Returns:
+            Trained RL model
+        """
+        self.logger.info(f"Training RL component for {total_timesteps} timesteps")
+        
+        save_path = os.path.join(self.log_dir, "rl_logs", "zelda_ppo_final.zip")
+        
+        model = self.rl_agent.train(
+            total_timesteps=total_timesteps,
+            eval_freq=eval_freq,
+            save_freq=save_freq,
+            n_eval_episodes=n_eval_episodes,
+            save_path=save_path
+        )
+        
+        self.logger.info(f"RL component training completed. Model saved to {save_path}")
+        
+        return model
+    
+    def load_rl_model(self, model_path: str):
+        """
+        Load a pre-trained RL model.
+        
+        Args:
+            model_path: Path to the model file
+        """
+        self.logger.info(f"Loading RL model from {model_path}")
+        self.rl_agent.load(model_path)
+    
+    def _extract_game_state(self, observation: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract relevant game state information from the observation.
+        
+        Args:
+            observation: Raw observation from the environment
+            
+        Returns:
+            Processed game state dictionary
+        """
+        game_state = {
+            "screen": observation.get("screen", None),
+            "health": observation.get("health", [0])[0] if isinstance(observation.get("health", [0]), (list, np.ndarray)) else observation.get("health", 0),
+            "position": tuple(observation.get("position", (0, 0))) if isinstance(observation.get("position", None), (list, np.ndarray)) else observation.get("position", (0, 0)),
+            "map_position": tuple(observation.get("map_position", (0, 0))) if isinstance(observation.get("map_position", None), (list, np.ndarray)) else observation.get("map_position", (0, 0)),
+            "rupees": observation.get("rupees", [0])[0] if isinstance(observation.get("rupees", [0]), (list, np.ndarray)) else observation.get("rupees", 0),
+            "inventory": observation.get("inventory", np.zeros(20)).tolist() if isinstance(observation.get("inventory", None), np.ndarray) else observation.get("inventory", [])
+        }
+        
+        game_state["current_objective"] = self.current_objective
+        game_state["has_plan"] = len(self.current_plan) > 0
+        
+        return game_state
+    
+    def _detect_dialogue(self, observation: Dict[str, Any]) -> Optional[str]:
+        """
+        Detect if there's dialogue on screen and extract it.
+        This is a placeholder - actual implementation would need OCR or memory reading.
+        
+        Args:
+            observation: Raw observation from the environment
+            
+        Returns:
+            Extracted dialogue text or None
+        """
+        
+        return None
+    
+    def _update_game_history(self, game_state: Dict[str, Any], action: int, reward: float, 
+                            info: Dict[str, Any], dialogue: Optional[str] = None):
+        """
+        Update the game history with the latest state and action.
+        
+        Args:
+            game_state: Current game state
+            action: Action taken
+            reward: Reward received
+            info: Additional information
+            dialogue: Detected dialogue (if any)
+        """
+        event = {
+            "state": {
+                "health": game_state["health"],
+                "position": game_state["position"],
+                "map_position": game_state["map_position"],
+                "rupees": game_state["rupees"]
+            },
+            "action": action,
+            "reward": float(reward),
+            "description": f"Took action {action} at position {game_state['position']} on map {game_state['map_position']}"
+        }
+        
+        if dialogue:
+            event["dialogue"] = dialogue
+            self.dialogue_history.append(dialogue)
+        
+        self.game_history.append(event)
+        
+        if len(self.game_history) > 1000:
+            self.game_history = self.game_history[-1000:]
+    
+    def _should_use_llm(self, game_state: Dict[str, Any], reward_history: List[float]) -> bool:
+        """
+        Determine if LLM guidance should be used based on current state.
+        
+        Args:
+            game_state: Current game state
+            reward_history: Recent reward history
+            
+        Returns:
+            True if LLM should be used, False otherwise
+        """
+        
+        if len(reward_history) >= 100:
+            recent_rewards = reward_history[-100:]
+            reward_variance = np.var(recent_rewards)
+            if reward_variance < 0.01 and np.mean(recent_rewards) <= 0:
+                return True
+        
+        if len(self.game_history) > 1:
+            prev_map = self.game_history[-2]["state"]["map_position"]
+            curr_map = game_state["map_position"]
+            if prev_map != curr_map:
+                return True
+        
+        if game_state["health"] <= 1:
+            return True
+        
+        if len(self.game_history) % 500 == 0 and len(self.game_history) > 0:
+            return True
+        
+        return False
+    
+    def _get_llm_guidance(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get guidance from the LLM based on current game state.
+        
+        Args:
+            game_state: Current game state
+            
+        Returns:
+            Guidance information
+        """
+        self.logger.info("Getting LLM guidance for current game state")
+        
+        if len(self.dialogue_history) > 0 and self.dialogue_history[-1]:
+            dialogue_context = {
+                "map_position": game_state["map_position"],
+                "previous_objectives": [self.current_objective]
+            }
+            
+            dialogue_interpretation = self.llm.interpret_dialogue(
+                self.dialogue_history[-1], dialogue_context
+            )
+            
+            if "quest_information" in dialogue_interpretation and dialogue_interpretation["quest_information"]:
+                self.current_objective = dialogue_interpretation["quest_information"]
+                self.current_plan = []  # Reset plan since objective changed
+            
+            return {
+                "type": "dialogue_guidance",
+                "interpretation": dialogue_interpretation,
+                "suggested_action": None
+            }
+        
+        if not self.current_plan:
+            plan = self.llm.plan_quest_progression(self.current_objective, game_state)
+            self.current_plan = plan
+            
+            return {
+                "type": "new_plan",
+                "plan": plan,
+                "suggested_action": None
+            }
+        
+        suggestion = self.llm.suggest_action(game_state, self.current_plan)
+        
+        return {
+            "type": "action_suggestion",
+            "current_plan_step": self.current_plan[0] if self.current_plan else None,
+            "suggestion": suggestion
+        }
+    
+    def _llm_action_to_env_action(self, llm_action: str) -> int:
+        """
+        Convert LLM action suggestion to environment action.
+        
+        Args:
+            llm_action: Action suggested by LLM
+            
+        Returns:
+            Environment action index
+        """
+        action_map = {
+            "move_up": 0,      # WindowEvent.PRESS_ARROW_UP
+            "move_right": 1,   # WindowEvent.PRESS_ARROW_RIGHT
+            "move_left": 2,    # WindowEvent.PRESS_ARROW_LEFT
+            "move_down": 3,    # WindowEvent.PRESS_ARROW_DOWN
+            "use_sword": 5,    # WindowEvent.PRESS_BUTTON_B
+            "interact": 4,     # WindowEvent.PRESS_BUTTON_A
+            "use_item": 4,     # WindowEvent.PRESS_BUTTON_A
+            "open_menu": 6,    # WindowEvent.PRESS_BUTTON_START
+            "swap_item": 7,    # WindowEvent.PRESS_BUTTON_SELECT
+            "wait": 8,         # No action
+        }
+        
+        return action_map.get(llm_action.lower(), 8)  # Default to "wait" if unknown
+    
+    def play(self, episodes: int = 1, max_steps_per_episode: int = 10000, 
+             llm_guidance_frequency: float = 0.1, deterministic: bool = True):
+        """
+        Play Zelda using the hybrid agent.
+        
+        Args:
+            episodes: Number of episodes to play
+            max_steps_per_episode: Maximum steps per episode
+            llm_guidance_frequency: Frequency of LLM guidance (0.0 to 1.0)
+            deterministic: Whether to use deterministic actions for RL
+            
+        Returns:
+            List of episode rewards
+        """
+        self.logger.info(f"Playing {episodes} episodes with hybrid agent")
+        
+        episode_rewards = []
+        
+        for episode in range(episodes):
+            self.logger.info(f"Starting episode {episode+1}/{episodes}")
+            
+            obs, info = self.env.reset()
+            done = False
+            truncated = False
+            episode_reward = 0
+            step = 0
+            
+            reward_history = []
+            
+            while not (done or truncated) and step < max_steps_per_episode:
+                game_state = self._extract_game_state(obs)
+                
+                dialogue = self._detect_dialogue(obs)
+                
+                use_llm = dialogue is not None or np.random.random() < llm_guidance_frequency or self._should_use_llm(game_state, reward_history)
+                
+                if use_llm:
+                    guidance = self._get_llm_guidance(game_state)
+                    
+                    if guidance["type"] == "action_suggestion" and guidance["suggestion"] and "action" in guidance["suggestion"]:
+                        llm_action = guidance["suggestion"]["action"]
+                        action = self._llm_action_to_env_action(llm_action)
+                        
+                        self.logger.info(f"Using LLM suggested action: {llm_action} (mapped to {action})")
+                        
+                        if guidance["suggestion"].get("completed_step", False) and self.current_plan:
+                            self.current_plan.pop(0)
+                    else:
+                        if hasattr(self.rl_agent, 'model') and self.rl_agent.model is not None:
+                            action, _ = self.rl_agent.model.predict(obs, deterministic=deterministic)
+                            if isinstance(action, np.ndarray):
+                                action = action[0]
+                        else:
+                            action = self.env.action_space.sample()
+                else:
+                    if hasattr(self.rl_agent, 'model') and self.rl_agent.model is not None:
+                        action, _ = self.rl_agent.model.predict(obs, deterministic=deterministic)
+                        if isinstance(action, np.ndarray):
+                            action = action[0]
+                    else:
+                        action = self.env.action_space.sample()
+                
+                next_obs, reward, done, truncated, info = self.env.step([action])
+                
+                self._update_game_history(game_state, action, reward, info, dialogue)
+                
+                obs = next_obs
+                episode_reward += reward
+                reward_history.append(reward)
+                step += 1
+                
+                if step % 100 == 0:
+                    self.logger.info(f"Episode {episode+1}, Step {step}, Reward: {float(episode_reward):.2f}")
+            
+            episode_rewards.append(episode_reward)
+            self.logger.info(f"Episode {episode+1} completed with reward {float(episode_reward):.2f} in {step} steps")
+            
+            episode_data = {
+                "episode": episode + 1,
+                "reward": float(episode_reward),
+                "steps": step,
+                "history": self.game_history[-min(step, 1000):]
+            }
+            
+            episode_file = os.path.join(self.log_dir, f"episode_{episode+1}_data.json")
+            with open(episode_file, 'w') as f:
+                json.dump(episode_data, f, indent=2)
+            
+            self.logger.info(f"Episode data saved to {episode_file}")
+        
+        return episode_rewards
+    
+    def close(self):
+        """Close the environment."""
+        if hasattr(self, 'env') and self.env is not None:
+            self.env.close()
+
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run the Hybrid Zelda Agent")
+    parser.add_argument("--rom", default="zelda.gbc", help="Path to Zelda ROM file")
+    parser.add_argument("--rl-model", default=None, help="Path to pre-trained RL model")
+    parser.add_argument("--train", action="store_true", help="Train the RL component")
+    parser.add_argument("--timesteps", type=int, default=100000, help="Number of timesteps to train for")
+    parser.add_argument("--episodes", type=int, default=1, help="Number of episodes to play")
+    parser.add_argument("--llm-frequency", type=float, default=0.1, help="Frequency of LLM guidance (0.0 to 1.0)")
+    parser.add_argument("--log-dir", default="./zelda_hybrid_logs", help="Directory to save logs")
+    
+    args = parser.parse_args()
+    
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    
+    agent = HybridZeldaAgent(
+        rom_path=args.rom,
+        rl_model_path=args.rl_model,
+        llm_api_key=api_key,
+        log_dir=args.log_dir
+    )
+    
+    try:
+        if args.train:
+            agent.train_rl_component(total_timesteps=args.timesteps)
+        
+        if args.rl_model:
+            agent.load_rl_model(args.rl_model)
+        
+        episode_rewards = agent.play(
+            episodes=args.episodes,
+            llm_guidance_frequency=args.llm_frequency
+        )
+        
+        print(f"Episode rewards: {episode_rewards}")
+        
+    finally:
+        agent.close()
