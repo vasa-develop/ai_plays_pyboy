@@ -193,7 +193,7 @@ class ZeldaRLAgent:
     
     def _create_model(self):
         """Create the RL model based on the selected algorithm."""
-        policy = "CnnPolicy"  # Use CNN policy for image-based observations
+        policy = "MultiInputPolicy"  # Use MultiInputPolicy for dict observation spaces
         
         if self.algorithm == "ppo":
             self.model = PPO(

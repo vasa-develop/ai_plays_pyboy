@@ -8,7 +8,7 @@ from zelda_rl_agent import ZeldaRLAgent, create_zelda_env
 def evaluate_zelda_agent():
     """Evaluate a trained reinforcement learning agent playing Zelda: Link's Awakening."""
     parser = argparse.ArgumentParser(description="Evaluate RL agent for Zelda: Link's Awakening")
-    parser.add_argument("--rom", default="zelda.gb", help="Path to Zelda ROM file")
+    parser.add_argument("--rom", default="zelda.gbc", help="Path to Zelda ROM file")
     parser.add_argument("--model", required=True, help="Path to trained model")
     parser.add_argument("--algorithm", choices=["ppo", "a2c", "dqn"], default="ppo", 
                         help="RL algorithm used for the model")

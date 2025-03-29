@@ -9,7 +9,7 @@ def test_zelda_rom():
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     
-    rom_path = "zelda.gb"
+    rom_path = "zelda.gbc"
     if not os.path.exists(rom_path):
         logger.error(f"ROM file not found: {rom_path}")
         return
@@ -21,8 +21,8 @@ def test_zelda_rom():
         
         logger.info(f"Cartridge title: {pyboy.cartridge_title}")
         
-        screen = pyboy.botsupport_manager().screen()
-        logger.info(f"Screen dimensions: {screen.raw_screen_buffer_dims()}")
+        screen_buffer = pyboy.screen_image()
+        logger.info(f"Screen dimensions: {screen_buffer.size}")
         
         logger.info("Running game for 5 seconds...")
         

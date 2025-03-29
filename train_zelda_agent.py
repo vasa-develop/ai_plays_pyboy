@@ -6,7 +6,7 @@ from zelda_rl_agent import ZeldaRLAgent, create_zelda_env
 def train_zelda_agent():
     """Train a reinforcement learning agent to play Zelda: Link's Awakening."""
     parser = argparse.ArgumentParser(description="Train RL agent for Zelda: Link's Awakening")
-    parser.add_argument("--rom", default="zelda.gb", help="Path to Zelda ROM file")
+    parser.add_argument("--rom", default="zelda.gbc", help="Path to Zelda ROM file")
     parser.add_argument("--algorithm", choices=["ppo", "a2c", "dqn"], default="ppo", 
                         help="RL algorithm to use")
     parser.add_argument("--timesteps", type=int, default=100000, 
