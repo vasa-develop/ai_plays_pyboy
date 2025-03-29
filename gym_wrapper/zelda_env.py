@@ -60,7 +60,7 @@ class ZeldaPyBoyEnv(gym.Env):
             'position': spaces.Box(low=0, high=255, shape=(2,), dtype=np.uint8),  # Changed to uint8
             'map_position': spaces.Box(low=0, high=15, shape=(2,), dtype=np.int8),
             'rupees': spaces.Box(low=0, high=999, shape=(1,), dtype=np.int16),
-            'items': spaces.MultiBinary(20),  # Simplified representation of inventory
+            'inventory': spaces.MultiBinary(20),  # Simplified representation of inventory
         })
         
     def _get_observation(self):
@@ -79,7 +79,7 @@ class ZeldaPyBoyEnv(gym.Env):
             'position': np.array(position, dtype=np.int8),
             'map_position': np.array(map_position, dtype=np.int8),
             'rupees': np.array([rupees], dtype=np.int16),
-            'items': items,
+            'inventory': items,
         }
     
     def _get_screen_buffer(self):
