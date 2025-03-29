@@ -58,7 +58,8 @@ class ZeldaEvalCallback(BaseCallback):
                 
                 while not (done or truncated):
                     action, _ = self.model.predict(obs, deterministic=True)
-                    obs, reward, done, truncated, info = self.eval_env.step(action)
+                    obs, reward, done, info = self.eval_env.step(action)
+                    truncated = False
                     episode_reward += reward
                     episode_length += 1
                 
@@ -358,7 +359,8 @@ class ZeldaRLAgent:
             
             while not (done or truncated):
                 action, _ = self.model.predict(obs, deterministic=deterministic)
-                obs, reward, done, truncated, info = self.env.step(action)
+                obs, reward, done, info = self.env.step(action)
+                truncated = False
                 
                 episode_reward += reward
                 step += 1
