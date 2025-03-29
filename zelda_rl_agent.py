@@ -67,15 +67,15 @@ class ZeldaEvalCallback(BaseCallback):
                 episode_lengths.append(episode_length)
                 
                 self._custom_logger.info(f"Evaluation episode {i+1}/{self.n_eval_episodes}: "
-                                f"reward={episode_reward:.2f}, length={episode_length}")
+                                f"reward={float(episode_reward):.2f}, length={episode_length}")
             
             mean_reward = np.mean(episode_rewards)
             std_reward = np.std(episode_rewards)
             mean_length = np.mean(episode_lengths)
             
             self._custom_logger.info(f"Evaluation at step {self.n_calls}: "
-                            f"mean_reward={mean_reward:.2f} +/- {std_reward:.2f}, "
-                            f"mean_length={mean_length:.1f}")
+                            f"mean_reward={float(mean_reward):.2f} +/- {float(std_reward):.2f}, "
+                            f"mean_length={float(mean_length):.1f}")
             
             if mean_reward > self.best_mean_reward:
                 self.best_mean_reward = mean_reward
@@ -366,14 +366,14 @@ class ZeldaRLAgent:
                 step += 1
                 
                 if step % 100 == 0:
-                    self._custom_logger.info(f"Episode {i+1}, Step {step}, Reward: {episode_reward:.2f}")
+                    self._custom_logger.info(f"Episode {i+1}, Step {step}, Reward: {float(episode_reward):.2f}")
                 
                 if delay > 0:
                     import time
                     time.sleep(delay)
             
             episode_rewards.append(episode_reward)
-            self._custom_logger.info(f"Episode {i+1} completed with reward {episode_reward:.2f}")
+            self._custom_logger.info(f"Episode {i+1} completed with reward {float(episode_reward):.2f}")
         
         return episode_rewards
     
