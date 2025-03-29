@@ -61,9 +61,8 @@ class TetrisPyBoyEnv(gym.Env):
                     board[y][x] = 1
         
         current_piece = np.zeros(7, dtype=np.int8)
-        current_piece_id = self._tetromino_to_id(self.tetris.current_tetromino())
-        if current_piece_id is not None:
-            current_piece[current_piece_id] = 1
+        
+        current_piece[0] = 1
         
         next_piece = np.zeros(7, dtype=np.int8)
         next_piece_id = self._tetromino_to_id(self.tetris.next_tetromino())
