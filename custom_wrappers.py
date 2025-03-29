@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 from stable_baselines3.common.vec_env import VecEnvWrapper
 from state_preprocessor import TetrisStatePreprocessor
+from reward_function import TetrisRewardFunction, AdaptiveRewardFunction
 
 class TetrisFeatureWrapper(gym.Wrapper):
     """
@@ -54,15 +55,21 @@ class TetrisRewardWrapper(gym.Wrapper):
     Uses the TetrisStatePreprocessor to calculate additional reward components.
     """
     
-    def __init__(self, env):
+    def __init__(self, env, adaptive=True):
         """
         Initialize the wrapper.
         
         Args:
             env: The environment to wrap
+            adaptive: Whether to use the adaptive reward function
         """
         super(TetrisRewardWrapper, self).__init__(env)
-        self.state_preprocessor = TetrisStatePreprocessor()
+        
+        if adaptive:
+            self.reward_function = AdaptiveRewardFunction()
+        else:
+            self.reward_function = TetrisRewardFunction()
+            
         self.previous_obs = None
     
     def reset(self, **kwargs):
@@ -74,6 +81,7 @@ class TetrisRewardWrapper(gym.Wrapper):
         """
         obs, info = self.env.reset(**kwargs)
         self.previous_obs = obs
+        self.reward_function.reset()
         return obs, info
     
     def step(self, action):
@@ -89,8 +97,8 @@ class TetrisRewardWrapper(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
         
         if self.previous_obs is not None:
-            enhanced_reward = self.state_preprocessor.extract_reward_features(
-                self.previous_obs, obs, reward
+            enhanced_reward = self.reward_function.calculate_reward(
+                self.previous_obs, obs, info, terminated
             )
         else:
             enhanced_reward = reward

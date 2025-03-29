@@ -9,6 +9,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from gym_wrapper import TetrisPyBoyEnv
 from state_preprocessor import TetrisStatePreprocessor
 from custom_wrappers import TetrisFeatureWrapper, TetrisRewardWrapper, VecTetrisFeatureWrapper
+from reward_function import TetrisRewardFunction, AdaptiveRewardFunction
 
 class TetrisHybridAI:
     """
