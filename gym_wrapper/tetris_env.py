@@ -137,15 +137,11 @@ class TetrisPyBoyEnv(gym.Env):
                 reward -= step_penalty
                 print(f"[REWARD] -{step_penalty:.2f} step penalty (continuous mode)")
                 
-                board = self._get_observation()['board']
-                board_sum = np.sum(board)
-                
-                if self.frame_count % 15 == 0:  # Periodically check for piece lock
-                    is_locked = self._is_piece_locked()
-                    if is_locked:
-                        placement_reward = 0.5
-                        reward += placement_reward
-                        print(f"[REWARD] +{placement_reward:.2f} for piece placement (continuous mode)")
+                if self.piece_locked:
+                    placement_reward = 0.5
+                    reward += placement_reward
+                    print(f"[REWARD] +{placement_reward:.2f} for piece placement (continuous mode)")
+                    self.piece_locked = False  # Reset the flag
                 
                 if self._is_game_over():
                     game_over_penalty = 10.0
@@ -318,9 +314,9 @@ class TetrisPyBoyEnv(gym.Env):
             else:
                 print(f"[TURN-BASED] Piece lock timeout after {frames_since_action} frames")
         else:
-            frames_to_advance = 5  # Default number of frames to advance
+            frames_to_advance = 4  # Total will be 5 frames including the action frame
             
-            print(f"[CONTINUOUS] Advancing {frames_to_advance} frames after action")
+            print(f"[CONTINUOUS] Advancing {frames_to_advance} more frames (total 5 with action)")
             for i in range(frames_to_advance):
                 self.pyboy.tick()
                 self.frame_count += 1
@@ -328,10 +324,12 @@ class TetrisPyBoyEnv(gym.Env):
                 if self.frame_delay > 0:
                     import time
                     time.sleep(self.frame_delay / frames_to_advance)
-                    
-            is_locked = self._is_piece_locked() if self.frame_count % 15 == 0 else False
+            
+            is_locked = self._is_piece_locked()
             if is_locked:
                 print("[CONTINUOUS] Piece has locked in place after advancing frames")
+                placement_reward = 0.5
+                self.piece_locked = True  # Set flag for reward calculation
         
         observation = self._get_observation()
         reward = self._calculate_reward()
