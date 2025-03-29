@@ -21,8 +21,8 @@ def test_zelda_rom():
         
         logger.info(f"Cartridge title: {pyboy.cartridge_title}")
         
-        screen_buffer = pyboy.screen_ndarray()
-        logger.info(f"Screen dimensions: {screen_buffer.shape}")
+        screen_buffer = pyboy.screen.image
+        logger.info(f"Screen dimensions: {screen_buffer.size}")
         
         logger.info("Running game for 5 seconds...")
         
