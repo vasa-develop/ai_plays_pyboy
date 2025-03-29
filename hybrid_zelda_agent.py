@@ -116,7 +116,7 @@ class HybridZeldaAgent:
         self.logger.info(f"Loading RL model from {model_path}")
         self.rl_agent.load(model_path)
     
-    def _extract_game_state(self, observation: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_game_state(self, observation) -> Dict[str, Any]:
         """
         Extract relevant game state information from the observation.
         
@@ -126,13 +126,56 @@ class HybridZeldaAgent:
         Returns:
             Processed game state dictionary
         """
+        if not isinstance(observation, dict):
+            if isinstance(observation, (list, tuple, np.ndarray)) and len(observation) > 0:
+                observation = observation[0]  # Extract first element if it's a batch
+                if not isinstance(observation, dict):
+                    observation = {"screen": observation}
+            else:
+                observation = {"screen": observation}
+        
+        health = 0
+        health_value = observation.get("health")
+        if isinstance(health_value, (list, np.ndarray)) and len(health_value) > 0:
+            health = health_value[0]
+        elif health_value is not None:
+            health = health_value
+            
+        position = (0, 0)
+        position_value = observation.get("position")
+        if isinstance(position_value, (list, tuple, np.ndarray)) and len(position_value) > 0:
+            position = tuple(position_value)
+        elif position_value is not None:
+            position = position_value
+            
+        map_position = (0, 0)
+        map_position_value = observation.get("map_position")
+        if isinstance(map_position_value, (list, tuple, np.ndarray)) and len(map_position_value) > 0:
+            map_position = tuple(map_position_value)
+        elif map_position_value is not None:
+            map_position = map_position_value
+            
+        rupees = 0
+        rupees_value = observation.get("rupees")
+        if isinstance(rupees_value, (list, np.ndarray)) and len(rupees_value) > 0:
+            rupees = rupees_value[0]
+        elif rupees_value is not None:
+            rupees = rupees_value
+            
+        inventory = []
+        inventory_value = observation.get("inventory")
+        if isinstance(inventory_value, np.ndarray):
+            inventory = inventory_value.tolist()
+        elif isinstance(inventory_value, (list, tuple)):
+            inventory = list(inventory_value)
+        
         game_state = {
             "screen": observation.get("screen", None),
-            "health": observation.get("health", [0])[0] if isinstance(observation.get("health", [0]), (list, np.ndarray)) else observation.get("health", 0),
-            "position": tuple(observation.get("position", (0, 0))) if isinstance(observation.get("position", None), (list, np.ndarray)) else observation.get("position", (0, 0)),
-            "map_position": tuple(observation.get("map_position", (0, 0))) if isinstance(observation.get("map_position", None), (list, np.ndarray)) else observation.get("map_position", (0, 0)),
-            "rupees": observation.get("rupees", [0])[0] if isinstance(observation.get("rupees", [0]), (list, np.ndarray)) else observation.get("rupees", 0),
-            "inventory": observation.get("inventory", np.zeros(20)).tolist() if isinstance(observation.get("inventory", None), np.ndarray) else observation.get("inventory", [])
+            "health": health,
+            "position": position,
+            "map_position": map_position,
+            "rupees": rupees,
+            "inventory": inventory
         }
         
         game_state["current_objective"] = self.current_objective
@@ -140,7 +183,7 @@ class HybridZeldaAgent:
         
         return game_state
     
-    def _detect_dialogue(self, observation: Dict[str, Any]) -> Optional[str]:
+    def _detect_dialogue(self, observation) -> Optional[str]:
         """
         Detect if there's dialogue on screen and extract it.
         This is a placeholder - actual implementation would need OCR or memory reading.
@@ -151,6 +194,13 @@ class HybridZeldaAgent:
         Returns:
             Extracted dialogue text or None
         """
+        if not isinstance(observation, dict):
+            if isinstance(observation, (list, tuple, np.ndarray)) and len(observation) > 0:
+                observation = observation[0]  # Extract first element if it's a batch
+                if not isinstance(observation, dict):
+                    return None
+            else:
+                return None
         
         return None
     
@@ -206,12 +256,23 @@ class HybridZeldaAgent:
                 return True
         
         if len(self.game_history) > 1:
-            prev_map = self.game_history[-2]["state"]["map_position"]
-            curr_map = game_state["map_position"]
-            if prev_map != curr_map:
-                return True
+            try:
+                prev_map = self.game_history[-2]["state"]["map_position"]
+                curr_map = game_state["map_position"]
+                
+                prev_map_array = np.array(prev_map)
+                curr_map_array = np.array(curr_map)
+                
+                if not np.array_equal(prev_map_array, curr_map_array):
+                    return True
+            except (ValueError, TypeError, IndexError) as e:
+                self.logger.warning(f"Error comparing map positions: {e}")
         
-        if game_state["health"] <= 1:
+        health = game_state["health"]
+        if isinstance(health, (list, tuple, np.ndarray)):
+            if len(health) > 0 and health[0] <= 1:
+                return True
+        elif health <= 1:
             return True
         
         if len(self.game_history) % 500 == 0 and len(self.game_history) > 0:
@@ -315,7 +376,12 @@ class HybridZeldaAgent:
         for episode in range(episodes):
             self.logger.info(f"Starting episode {episode+1}/{episodes}")
             
-            obs, info = self.env.reset()
+            reset_result = self.env.reset()
+            if isinstance(reset_result, tuple) and len(reset_result) == 2:
+                obs, info = reset_result
+            else:
+                obs = reset_result
+                info = {}
             done = False
             truncated = False
             episode_reward = 0
@@ -356,7 +422,28 @@ class HybridZeldaAgent:
                     else:
                         action = self.env.action_space.sample()
                 
-                next_obs, reward, done, truncated, info = self.env.step([action])
+                step_result = self.env.step([action])
+                
+                if isinstance(step_result, tuple):
+                    if len(step_result) == 5:  # New Gymnasium API: obs, reward, terminated, truncated, info
+                        next_obs, reward, done, truncated, info = step_result
+                    elif len(step_result) == 4:  # Old Gym API: obs, reward, done, info
+                        next_obs, reward, done, info = step_result
+                        truncated = False
+                    else:
+                        next_obs = step_result[0] if len(step_result) > 0 else None
+                        reward = step_result[1] if len(step_result) > 1 else 0
+                        done = step_result[2] if len(step_result) > 2 else False
+                        truncated = False
+                        info = {}
+                        if len(step_result) > 0 and isinstance(step_result[-1], dict):
+                            info = step_result[-1]
+                else:
+                    next_obs = step_result
+                    reward = 0
+                    done = False
+                    truncated = False
+                    info = {}
                 
                 self._update_game_history(game_state, action, reward, info, dialogue)
                 
