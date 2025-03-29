@@ -157,15 +157,45 @@ class TetrisPyBoyEnv(gym.Env):
     def _is_game_over(self):
         """Check if the game is over."""
         
-        if self.frame_count < 300:  # Ensure we're past all loading screens
-            print(f"[GAME_OVER] Skipping check during initialization (frame {self.frame_count})")
+        is_tetris_dx = self.pyboy and self.pyboy.cartridge_title and "DX" in self.pyboy.cartridge_title.upper()
+        init_threshold = 500 if is_tetris_dx else 300
+        
+        if self.frame_count < init_threshold:
+            print(f"[GAME_OVER] Skipping check during initialization (frame {self.frame_count}/{init_threshold})")
             return False
         
-        if hasattr(self.tetris, 'game_over') and self.tetris.game_over:
-            print("[GAME_OVER] Detected via PyBoy's built-in game_over attribute")
-            if self.render_mode == "human" and self.pyboy is not None:
-                self._save_game_over_screenshot()
-            return True
+        try:
+            if hasattr(self.tetris, 'game_over'):
+                if callable(self.tetris.game_over):
+                    try:
+                        if self.tetris.game_over():
+                            print("[GAME_OVER] Detected via PyBoy's game_over() method")
+                            if self.render_mode == "human" and self.pyboy is not None:
+                                self._save_game_over_screenshot()
+                            return True
+                    except Exception as e:
+                        print(f"Warning: Error calling game_over method: {e}")
+                else:
+                    if self.tetris.game_over:
+                        print("[GAME_OVER] Detected via PyBoy's game_over attribute")
+                        if self.render_mode == "human" and self.pyboy is not None:
+                            self._save_game_over_screenshot()
+                        return True
+        except Exception as e:
+            print(f"Warning: Error checking game_over attribute: {e}")
+        
+        try:
+            if hasattr(self.tetris, 'tilemap_background'):
+                try:
+                    if self.tetris.tilemap_background[2, 0] == 135:
+                        print("[GAME_OVER] Detected via tilemap background tile check")
+                        if self.render_mode == "human" and self.pyboy is not None:
+                            self._save_game_over_screenshot()
+                        return True
+                except Exception as e:
+                    print(f"Warning: Error checking tilemap background: {e}")
+        except Exception as e:
+            print(f"Warning: Error accessing tilemap_background: {e}")
         
         board = self._get_observation()['board']
         top_rows_filled = np.sum(board[0:2, :]) > 10  # Only check top 2 rows
@@ -177,7 +207,7 @@ class TetrisPyBoyEnv(gym.Env):
             return True
         
         try:
-            if self.pyboy is not None:
+            if self.pyboy is not None and self.frame_count > 1000:  # Only use screen detection after significant gameplay
                 screen = self.pyboy.screen
                 if hasattr(screen, 'ndarray'):
                     screen_buffer = screen.ndarray
@@ -188,15 +218,13 @@ class TetrisPyBoyEnv(gym.Env):
                         center_region = screen_buffer[120:300, 80:240]
                         
                         white_pixels = np.sum(center_region > 200)
-                        
                         black_pixels = np.sum(center_region < 50)
                         white_to_black_ratio = white_pixels / (black_pixels + 1)  # Avoid division by zero
                         
                         print(f"[GAME_OVER] Screen analysis: white={white_pixels}, black={black_pixels}, ratio={white_to_black_ratio:.2f}")
                         
                         if (white_pixels > 500 and white_pixels < 5000 and 
-                            white_to_black_ratio > 0.05 and white_to_black_ratio < 0.3 and
-                            self.frame_count > 1000):  # Only use screen detection after significant gameplay
+                            white_to_black_ratio > 0.05 and white_to_black_ratio < 0.3):
                             print("[GAME_OVER] Detected via screen analysis")
                             if self.render_mode == "human" and self.pyboy is not None:
                                 self._save_game_over_screenshot()
@@ -429,46 +457,84 @@ class TetrisPyBoyEnv(gym.Env):
         self.tetris = self.pyboy.game_wrapper
         
         print("[INIT] Starting game and skipping loading screens...")
+        print(f"[INIT] ROM title: {self.pyboy.cartridge_title}")
         
-        self.tetris.start_game(timer_div=0x00)
-        print("[INIT] Called start_game(timer_div=0x00)")
+        is_tetris_dx = self.pyboy.cartridge_title and "DX" in self.pyboy.cartridge_title.upper()
         
-        print("[INIT] Advancing 120 frames...")
-        for i in range(120):
+        if is_tetris_dx:
+            print("[INIT] Detected Tetris DX (Game Boy Color ROM)")
+            
+            self.tetris.start_game(timer_div=0x00)
+            print("[INIT] Called start_game(timer_div=0x00)")
+            
+            print("[INIT] Advancing 150 frames...")
+            for i in range(150):
+                self.pyboy.tick()
+                if i % 30 == 0:
+                    print(f"[INIT] Advanced {i} frames")
+            
+            for j in range(3):
+                print(f"[INIT] Pressing START button (attempt {j+1})...")
+                self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+                self.pyboy.tick()
+                self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+                
+                print(f"[INIT] Advancing 60 frames after START button {j+1}...")
+                for i in range(60):
+                    self.pyboy.tick()
+                    if i % 20 == 0:
+                        print(f"[INIT] Advanced {i} more frames")
+            
+            print("[INIT] Pressing A button to select game type...")
+            self.pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
             self.pyboy.tick()
-            if i % 30 == 0:
-                print(f"[INIT] Advanced {i} frames")
-        
-        print("[INIT] Pressing START button...")
-        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
-        self.pyboy.tick()
-        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
-        
-        print("[INIT] Advancing 60 frames...")
-        for i in range(60):
+            self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
+            
+            print("[INIT] Advancing 90 final frames...")
+            for i in range(90):
+                self.pyboy.tick()
+                if i % 30 == 0:
+                    print(f"[INIT] Advanced {i} final frames")
+        else:
+            self.tetris.start_game(timer_div=0x00)
+            print("[INIT] Called start_game(timer_div=0x00)")
+            
+            print("[INIT] Advancing 120 frames...")
+            for i in range(120):
+                self.pyboy.tick()
+                if i % 30 == 0:
+                    print(f"[INIT] Advanced {i} frames")
+            
+            print("[INIT] Pressing START button...")
+            self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
             self.pyboy.tick()
-            if i % 20 == 0:
-                print(f"[INIT] Advanced {i} more frames")
-        
-        print("[INIT] Pressing START button again...")
-        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
-        self.pyboy.tick()
-        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
-        
-        print("[INIT] Advancing 30 frames...")
-        for i in range(30):
+            self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+            
+            print("[INIT] Advancing 60 frames...")
+            for i in range(60):
+                self.pyboy.tick()
+                if i % 20 == 0:
+                    print(f"[INIT] Advanced {i} more frames")
+            
+            print("[INIT] Pressing START button again...")
+            self.pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
             self.pyboy.tick()
-        
-        print("[INIT] Pressing A button to select game type...")
-        self.pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
-        self.pyboy.tick()
-        self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
-        
-        print("[INIT] Advancing 60 final frames...")
-        for i in range(60):
+            self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+            
+            print("[INIT] Advancing 30 frames...")
+            for i in range(30):
+                self.pyboy.tick()
+            
+            print("[INIT] Pressing A button to select game type...")
+            self.pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
             self.pyboy.tick()
-            if i % 20 == 0:
-                print(f"[INIT] Advanced {i} final frames")
+            self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
+            
+            print("[INIT] Advancing 60 final frames...")
+            for i in range(60):
+                self.pyboy.tick()
+                if i % 20 == 0:
+                    print(f"[INIT] Advanced {i} final frames")
         
         print("[INIT] Game initialized and ready to play")
         
