@@ -59,19 +59,28 @@ class TetrisPyBoyEnv(gym.Env):
     def _get_observation(self):
         """Extract the current game state as an observation."""
         board = np.zeros((18, 10), dtype=np.int8)
-        for y in range(18):
-            for x in range(10):
-                if self.tetris.game_area()[y][x]:
-                    board[y][x] = 1
+        try:
+            for y in range(18):
+                for x in range(10):
+                    if self.tetris.game_area()[y][x]:
+                        board[y][x] = 1
+        except (AttributeError, IndexError) as e:
+            print(f"Warning: Error accessing game area: {e}")
         
         current_piece = np.zeros(7, dtype=np.int8)
-        
         current_piece[0] = 1
         
         next_piece = np.zeros(7, dtype=np.int8)
-        next_piece_id = self._tetromino_to_id(self.tetris.next_tetromino())
-        if next_piece_id is not None:
-            next_piece[next_piece_id] = 1
+        try:
+            if hasattr(self.tetris, 'next_tetromino'):
+                next_piece_id = self._tetromino_to_id(self.tetris.next_tetromino())
+                if next_piece_id is not None:
+                    next_piece[next_piece_id] = 1
+            else:
+                import random
+                next_piece[random.randint(0, 6)] = 1
+        except Exception as e:
+            print(f"Warning: Error getting next piece: {e}")
         
         return {
             'board': board,
@@ -92,26 +101,30 @@ class TetrisPyBoyEnv(gym.Env):
     
     def _calculate_reward(self):
         """Calculate the reward based on score and lines cleared."""
-        current_score = self.tetris.score
-        current_lines = self.tetris.lines
-        
-        score_diff = current_score - self.prev_score
-        lines_diff = current_lines - self.prev_lines
-        
-        self.prev_score = current_score
-        self.prev_lines = current_lines
-        
-        reward = score_diff / 100.0  # Normalize score
-        
-        if lines_diff > 0:
-            reward += 2 ** lines_diff
-        
-        reward -= 0.01
-        
-        if self._is_game_over():
-            reward -= 10
-        
-        return reward
+        try:
+            current_score = self.tetris.score
+            current_lines = self.tetris.lines
+            
+            score_diff = current_score - self.prev_score
+            lines_diff = current_lines - self.prev_lines
+            
+            self.prev_score = current_score
+            self.prev_lines = current_lines
+            
+            reward = score_diff / 100.0  # Normalize score
+            
+            if lines_diff > 0:
+                reward += 2 ** lines_diff
+            
+            reward -= 0.01
+            
+            if self._is_game_over():
+                reward -= 10
+            
+            return reward
+        except Exception as e:
+            print(f"Warning: Error calculating reward: {e}")
+            return -0.01
     
     def _is_game_over(self):
         """Check if the game is over."""
@@ -142,18 +155,22 @@ class TetrisPyBoyEnv(gym.Env):
     
     def _is_piece_locked(self):
         """Check if the current piece has locked in place."""
-        board_before = self._get_observation()['board'].copy()
-        
-        self.pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
-        self.pyboy.tick()
-        self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
-        
-        for _ in range(3):
+        try:
+            board_before = self._get_observation()['board'].copy()
+            
+            self.pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
             self.pyboy.tick()
-        
-        board_after = self._get_observation()['board'].copy()
-        
-        return np.array_equal(board_before, board_after)
+            self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
+            
+            for _ in range(3):
+                self.pyboy.tick()
+            
+            board_after = self._get_observation()['board'].copy()
+            
+            return np.array_equal(board_before, board_after)
+        except Exception as e:
+            print(f"Warning: Error checking if piece is locked: {e}")
+            return True
     
     def step(self, action):
         """
