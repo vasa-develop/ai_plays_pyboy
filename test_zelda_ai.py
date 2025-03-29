@@ -1,6 +1,7 @@
 import os
 import argparse
 import logging
+import numpy as np
 from zelda_rl_agent import ZeldaRLAgent, create_zelda_env
 
 def test_zelda_ai():
@@ -38,14 +39,35 @@ def test_zelda_ai():
             env = create_zelda_env(args.rom, render_mode="human")
             
             logger.info("Resetting environment...")
-            obs, info = env.reset()
-            logger.info(f"Observation shape: {obs['screen'].shape}")
+            reset_result = env.reset()
+            if isinstance(reset_result, tuple) and len(reset_result) == 2:
+                obs, info = reset_result
+            else:
+                obs = reset_result
+                info = {}
+            logger.info(f"Observation shape: {obs['screen'].shape if isinstance(obs, dict) else obs.shape}")
             logger.info(f"Info: {info}")
             
             logger.info("Taking random actions...")
             for i in range(100):
                 action = env.action_space.sample()
-                obs, reward, done, truncated, info = env.step(action)
+                step_result = env.step(action)
+                
+                if len(step_result) == 4:
+                    obs, reward, done, info = step_result
+                    truncated = False
+                elif len(step_result) == 5:
+                    obs, reward, done, truncated, info = step_result
+                else:
+                    logger.error(f"Unexpected step result format: {step_result}")
+                    break
+                
+                if isinstance(reward, (list, np.ndarray)):
+                    reward = reward[0]
+                if isinstance(done, (list, np.ndarray)):
+                    done = done[0]
+                if isinstance(truncated, (list, np.ndarray)):
+                    truncated = truncated[0]
                 
                 if i % 10 == 0:
                     logger.info(f"Step {i}, Action: {action}, Reward: {reward}")
