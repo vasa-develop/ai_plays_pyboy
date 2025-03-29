@@ -20,6 +20,8 @@ def evaluate_tetris_agent():
                         help="Directory to save logs and evaluation results")
     parser.add_argument("--save-video", action="store_true", 
                         help="Save video of gameplay (not implemented yet)")
+    parser.add_argument("--delay", type=float, default=0.0, 
+                        help="Delay between moves in seconds (for streaming)")
     args = parser.parse_args()
     
     logging.basicConfig(
@@ -63,8 +65,8 @@ def evaluate_tetris_agent():
         
         agent.load(args.model)
         
-        logger.info(f"Starting evaluation for {args.episodes} episodes")
-        episode_rewards = agent.play(episodes=args.episodes, deterministic=True)
+        logger.info(f"Starting evaluation for {args.episodes} episodes with {args.delay}s delay")
+        episode_rewards = agent.play(episodes=args.episodes, deterministic=True, delay=args.delay)
         
         mean_reward = np.mean(episode_rewards)
         std_reward = np.std(episode_rewards)

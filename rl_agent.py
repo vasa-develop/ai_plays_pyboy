@@ -159,13 +159,14 @@ class TetrisRLAgent:
         
         return self.model
     
-    def play(self, episodes=1, deterministic=True):
+    def play(self, episodes=1, deterministic=True, delay=0.0):
         """
         Play Tetris using the trained model.
         
         Args:
             episodes: Number of episodes to play
             deterministic: Whether to use deterministic actions
+            delay: Delay between moves in seconds (for streaming)
             
         Returns:
             List of episode rewards
@@ -173,7 +174,7 @@ class TetrisRLAgent:
         if self.model is None:
             self.create_model()
         
-        self.logger.info(f"Playing {episodes} episodes of Tetris")
+        self.logger.info(f"Playing {episodes} episodes of Tetris with {delay}s delay between moves")
         
         episode_rewards = []
         
@@ -185,6 +186,10 @@ class TetrisRLAgent:
             
             while not done:
                 action, _ = self.model.predict(obs, deterministic=deterministic)
+                
+                if delay > 0:
+                    import time
+                    time.sleep(delay)
                 
                 obs, reward, done, info = self.env.step(action)
                 
