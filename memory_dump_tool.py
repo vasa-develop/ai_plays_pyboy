@@ -1,8 +1,9 @@
 """
-Memory Dump Tool for Zelda: Link's Awakening
+Position-Focused Memory Dump Tool for Zelda: Link's Awakening
 
 This script runs the game in render mode and captures memory snapshots
-when movement keys are pressed. The data is saved to a file for analysis.
+with a focus on position tracking. It performs consecutive key presses
+in the same direction to better identify position-related memory addresses.
 """
 from pyboy import PyBoy
 from pyboy.utils import WindowEvent
@@ -10,11 +11,22 @@ import time
 import json
 import os
 from datetime import datetime
+import memory_map_zelda as mem
 
 MEMORY_REGIONS = [
-    (0xC000, 0xC020, "Player Position/State"),  # Player position and state
+    (0xC000, 0xC010, "Player Position"),        # Player position (focused)
+    (0xC010, 0xC020, "Player State"),           # Player state
     (0xC100, 0xC110, "Health/Status"),          # Health and status
     (0xD300, 0xD350, "Enemy States")            # Enemy states
+]
+
+POSITION_ADDRESSES = [
+    mem.LINK_X_POS,
+    mem.LINK_Y_POS,
+    mem.LINK_SPRITE_X,
+    mem.LINK_SPRITE_Y,
+    mem.LINK_DIRECTION_FLAGS,
+    mem.LINK_DIRECTION_FLAGS2
 ]
 
 KEY_MAPPING = {
@@ -28,13 +40,21 @@ KEY_MAPPING = {
     WindowEvent.PRESS_BUTTON_SELECT: "SELECT"
 }
 
-def dump_memory(pyboy, key_pressed=None):
-    """Dump memory regions to a dictionary."""
+def dump_memory(pyboy, key_pressed=None, consecutive_count=0):
+    """Dump memory regions to a dictionary with position tracking.
+    
+    Args:
+        pyboy: PyBoy instance
+        key_pressed: Name of the key being pressed
+        consecutive_count: Number of consecutive presses of the same key
+    """
     memory_dump = {
         "timestamp": datetime.now().isoformat(),
         "frame": pyboy.frame_count,
         "key_pressed": key_pressed,
-        "regions": {}
+        "consecutive_count": consecutive_count,
+        "regions": {},
+        "position_data": {}
     }
     
     for start, end, name in MEMORY_REGIONS:
@@ -44,12 +64,20 @@ def dump_memory(pyboy, key_pressed=None):
             region_data[f"0x{addr:04X}"] = value
         memory_dump["regions"][name] = region_data
     
+    for addr in POSITION_ADDRESSES:
+        addr_hex = f"0x{addr:04X}"
+        memory_dump["position_data"][addr_hex] = pyboy.memory[addr]
+    
     return memory_dump
 
 def run_memory_dump_tool():
-    """Run the game and capture memory dumps on key presses."""
+    """Run the game and capture memory dumps with focus on position tracking."""
     rom_path = "zelda.gbc"
-    output_file = "zelda_memory_dumps.json"
+    output_file = "zelda_position_dumps.json"
+    
+    print("Starting Zelda: Link's Awakening Position-Focused Memory Dump Tool")
+    print("This tool will automatically press keys in sequence to track position changes")
+    print("Press Ctrl+C to exit and save the memory dumps")
     
     pyboy = PyBoy(rom_path, window="SDL2", scale=3)
     pyboy.set_emulation_speed(1)  # Normal speed
@@ -58,10 +86,6 @@ def run_memory_dump_tool():
     
     initial_dump = dump_memory(pyboy, "INITIAL")
     memory_dumps.append(initial_dump)
-    
-    print("Starting Zelda: Link's Awakening Memory Dump Tool")
-    print("Press arrow keys to move Link and capture memory dumps")
-    print("Press Ctrl+C to exit and save the memory dumps")
     
     for _ in range(100):
         pyboy.tick()
@@ -85,78 +109,54 @@ def run_memory_dump_tool():
         if elapsed % 5 == 0 and elapsed > 0:
             print(f"  {30 - elapsed} seconds remaining...")
     
-    print("\nStarting automatic key presses now!")
+    print("\nStarting position tracking tests!")
     
     manual_nav_dump = dump_memory(pyboy, "AFTER_MANUAL_NAVIGATION")
     memory_dumps.append(manual_nav_dump)
     
-    last_key = None
-    last_dump_frame = 0
+    directions = [
+        {"key": WindowEvent.PRESS_ARROW_UP, "release": WindowEvent.RELEASE_ARROW_UP, "name": "UP"},
+        {"key": WindowEvent.PRESS_ARROW_DOWN, "release": WindowEvent.RELEASE_ARROW_DOWN, "name": "DOWN"},
+        {"key": WindowEvent.PRESS_ARROW_LEFT, "release": WindowEvent.RELEASE_ARROW_LEFT, "name": "LEFT"},
+        {"key": WindowEvent.PRESS_ARROW_RIGHT, "release": WindowEvent.RELEASE_ARROW_RIGHT, "name": "RIGHT"}
+    ]
     
     try:
-        while True:
+        for direction in directions:
+            print(f"\nTesting {direction['name']} direction with consecutive presses...")
+            
+            print(f"  First press (direction change)...")
+            pyboy.send_input(direction["key"])
             pyboy.tick()
+            pyboy.send_input(direction["release"])
             
-            key_pressed = None
+            direction_dump = dump_memory(pyboy, direction["name"], consecutive_count=1)
+            memory_dumps.append(direction_dump)
             
-            if pyboy.frame_count % 60 == 0:
-                frame_key = (pyboy.frame_count // 60) % 8
-                if frame_key == 0:
-                    pyboy.send_input(WindowEvent.PRESS_ARROW_UP)
-                    key_pressed = "UP"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_ARROW_UP)
-                elif frame_key == 1:
-                    pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
-                    key_pressed = "DOWN"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
-                elif frame_key == 2:
-                    pyboy.send_input(WindowEvent.PRESS_ARROW_LEFT)
-                    key_pressed = "LEFT"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_ARROW_LEFT)
-                elif frame_key == 3:
-                    pyboy.send_input(WindowEvent.PRESS_ARROW_RIGHT)
-                    key_pressed = "RIGHT"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_ARROW_RIGHT)
-                elif frame_key == 4:
-                    pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
-                    key_pressed = "A"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
-                elif frame_key == 5:
-                    pyboy.send_input(WindowEvent.PRESS_BUTTON_B)
-                    key_pressed = "B"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_B)
-                elif frame_key == 6:
-                    pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
-                    key_pressed = "START"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
-                elif frame_key == 7:
-                    pyboy.send_input(WindowEvent.PRESS_BUTTON_SELECT)
-                    key_pressed = "SELECT"
-                    pyboy.tick()
-                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_SELECT)
+            for _ in range(10):
+                pyboy.tick()
             
-            if key_pressed and (key_pressed != last_key or pyboy.frame_count - last_dump_frame > 30):
-                print(f"Key pressed: {key_pressed}, capturing memory dump...")
-                memory_dump = dump_memory(pyboy, key_pressed)
-                memory_dumps.append(memory_dump)
-                last_key = key_pressed
-                last_dump_frame = pyboy.frame_count
+            for i in range(2, 6):  # 4 more presses (5 total)
+                print(f"  Press #{i} (movement)...")
+                pyboy.send_input(direction["key"])
+                pyboy.tick()
+                pyboy.send_input(direction["release"])
+                
+                movement_dump = dump_memory(pyboy, direction["name"], consecutive_count=i)
+                memory_dumps.append(movement_dump)
+                
+                for _ in range(10):
+                    pyboy.tick()
             
-            if not key_pressed:
-                last_key = None
+            for _ in range(30):
+                pyboy.tick()
             
-            if pyboy.frame_count % 300 == 0:
-                with open(output_file, 'w') as f:
-                    json.dump(memory_dumps, f, indent=2)
-                print(f"Saved {len(memory_dumps)} memory dumps to {output_file}")
-            
+            with open(output_file, 'w') as f:
+                json.dump(memory_dumps, f, indent=2)
+            print(f"  Saved {len(memory_dumps)} memory dumps to {output_file}")
+        
+        print("\nPosition tracking tests completed!")
+        
     except KeyboardInterrupt:
         print("\nExiting...")
     finally:
