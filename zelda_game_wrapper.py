@@ -22,18 +22,32 @@ class ZeldaGameWrapper:
         return self.pyboy.memory[mem.LINK_MAX_HEALTH]
     
     def get_player_position(self):
-        """Get Link's current position on the screen."""
-        x = self.pyboy.memory[mem.LINK_X_POS]
-        y = self.pyboy.memory[mem.LINK_Y_POS]
+        """Get Link's current position on the screen.
+        
+        Uses the reverse-engineered memory addresses that have been verified to work.
+        The official RAM map doesn't explicitly list Link's X/Y coordinates.
+        """
+        x = self.pyboy.memory[mem.LINK_X_POS_OLD]
+        y = self.pyboy.memory[mem.LINK_Y_POS_OLD]
         return (x, y)
     
+    def get_destination_position(self):
+        """Get the destination X/Y coordinates when changing rooms/areas."""
+        x = self.pyboy.memory[mem.DEST_X_POS]
+        y = self.pyboy.memory[mem.DEST_Y_POS]
+        return (x, y)
+    
+    def get_dungeon_position(self):
+        """Get Link's position on the 8x8 dungeon grid."""
+        return self.pyboy.memory[mem.DUNGEON_POS]
+    
     def get_player_direction(self):
-        """Get Link's facing direction using official memory address.
+        """Get Link's facing direction using reverse-engineered memory address.
         
         Returns:
             int: Direction constant (0=UP, 1=RIGHT, 2=DOWN, 3=LEFT)
         """
-        return self.pyboy.memory[mem.LINK_DIRECTION]
+        return self.pyboy.memory[mem.LINK_DIRECTION_OLD]
     
     def get_player_direction_name(self):
         """Get Link's facing direction as a string."""
@@ -50,26 +64,67 @@ class ZeldaGameWrapper:
         else:
             return "UNKNOWN"
     
-    def get_player_animation_state(self):
-        """Get Link's animation state."""
-        return self.pyboy.memory[mem.LINK_ANIMATION_STATE]
+    def get_held_items(self):
+        """Get Link's currently held items (A and B buttons)."""
+        item_a = self.pyboy.memory[mem.HELD_ITEM_A]
+        item_b = self.pyboy.memory[mem.HELD_ITEM_B]
+        
+        item_names = {
+            mem.ITEM_SWORD: "Sword",
+            mem.ITEM_BOMBS: "Bombs",
+            mem.ITEM_POWER_BRACELET: "Power Bracelet",
+            mem.ITEM_SHIELD: "Shield",
+            mem.ITEM_BOW: "Bow",
+            mem.ITEM_HOOKSHOT: "Hookshot",
+            mem.ITEM_FIRE_ROD: "Fire Rod",
+            mem.ITEM_PEGASUS_BOOTS: "Pegasus Boots",
+            mem.ITEM_OCARINA: "Ocarina",
+            mem.ITEM_FEATHER: "Feather",
+            mem.ITEM_SHOVEL: "Shovel",
+            mem.ITEM_MAGIC_POWDER: "Magic Powder",
+            mem.ITEM_BOOMERANG: "Boomerang"
+        }
+        
+        item_a_name = item_names.get(item_a, f"Unknown ({item_a})")
+        item_b_name = item_names.get(item_b, f"Unknown ({item_b})")
+        
+        return {
+            "item_a": item_a,
+            "item_a_name": item_a_name,
+            "item_b": item_b,
+            "item_b_name": item_b_name
+        }
     
     def get_rupees(self):
         """Get Link's rupee count."""
-        low_byte = self.pyboy.memory[mem.LINK_RUPEES]
-        high_byte = self.pyboy.memory[mem.LINK_RUPEES_HIGH]
+        low_byte = self.pyboy.memory[mem.RUPEES_LOW]
+        high_byte = self.pyboy.memory[mem.RUPEES_HIGH]
         return (high_byte << 8) + low_byte
     
     def get_items(self):
         """Get Link's inventory items."""
         return {
-            "sword_level": self.pyboy.memory[mem.LINK_SWORD_LEVEL],
-            "shield_level": self.pyboy.memory[mem.LINK_SHIELD_LEVEL],
-            "bombs": self.pyboy.memory[mem.LINK_BOMBS],
-            "arrows": self.pyboy.memory[mem.LINK_ARROWS],
-            "magic_powder": self.pyboy.memory[mem.LINK_MAGIC_POWDER],
-            "selected_item_a": self.pyboy.memory[mem.LINK_SELECTED_ITEM_A],
-            "selected_item_b": self.pyboy.memory[mem.LINK_SELECTED_ITEM_B]
+            "sword_level": self.pyboy.memory[mem.SWORD_LEVEL],
+            "shield_level": self.pyboy.memory[mem.SHIELD_LEVEL],
+            "bombs": self.pyboy.memory[mem.BOMBS],
+            "arrows": self.pyboy.memory[mem.ARROWS],
+            "magic_powder": self.pyboy.memory[mem.MAGIC_POWDER],
+            "flippers": self.pyboy.memory[mem.FLIPPERS],
+            "potion": self.pyboy.memory[mem.POTION],
+            "trading_item": self.pyboy.memory[mem.TRADING_ITEM],
+            "secret_shells": self.pyboy.memory[mem.SECRET_SHELLS],
+            "golden_leaves": self.pyboy.memory[mem.GOLDEN_LEAVES],
+            "ocarina_songs": self.pyboy.memory[mem.OCARINA_SONGS],
+            "ocarina_selected": self.pyboy.memory[mem.OCARINA_SELECTED]
+        }
+    
+    def get_max_capacities(self):
+        """Get maximum capacities for consumable items."""
+        return {
+            "max_magic_powder": self.pyboy.memory[mem.MAX_MAGIC_POWDER],
+            "max_bombs": self.pyboy.memory[mem.MAX_BOMBS],
+            "max_arrows": self.pyboy.memory[mem.MAX_ARROWS],
+            "keys": self.pyboy.memory[mem.KEYS_IN_POSESSION]
         }
     
     def get_game_state(self):
@@ -78,28 +133,9 @@ class ZeldaGameWrapper:
             "state": self.pyboy.memory[mem.GAME_STATE],
             "substate": self.pyboy.memory[mem.GAME_SUBSTATE],
             "room_id": self.pyboy.memory[mem.GAME_ROOM_ID],
-            "dungeon_id": self.pyboy.memory[mem.GAME_DUNGEON_ID]
+            "dungeon_id": self.pyboy.memory[mem.GAME_DUNGEON_ID],
+            "current_map": self.pyboy.memory[mem.CURRENT_MAP]
         }
-    
-    def get_enemy_states(self):
-        """Get states of enemies on screen."""
-        enemies = []
-        enemy_count = self.pyboy.memory[mem.ENEMY_COUNT]
-        
-        for i in range(min(enemy_count, 5)):  # Limit to 5 enemies
-            base_addr = mem.ENEMY_STATE_START + (i * 16)  # 16 bytes per enemy
-            enemy_type = self.pyboy.memory[base_addr + (mem.ENEMY_TYPE - mem.ENEMY_STATE_START)]
-            
-            if enemy_type != 0:
-                enemy = {
-                    'type': enemy_type,
-                    'health': self.pyboy.memory[base_addr + (mem.ENEMY_HEALTH - mem.ENEMY_STATE_START)],
-                    'x': self.pyboy.memory[base_addr + (mem.ENEMY_POSITION_X - mem.ENEMY_STATE_START)],
-                    'y': self.pyboy.memory[base_addr + (mem.ENEMY_POSITION_Y - mem.ENEMY_STATE_START)]
-                }
-                enemies.append(enemy)
-        
-        return enemies
     
     def get_game_progress(self):
         """Get current game progress flags."""
@@ -107,6 +143,14 @@ class ZeldaGameWrapper:
         for i in range(16):  # Read 16 bytes of progress flags
             progress_flags.append(self.pyboy.memory[mem.GAME_PROGRESS_FLAGS + i])
         return progress_flags
+    
+    def get_inventory(self):
+        """Get Link's full inventory (10 bytes)."""
+        inventory = []
+        for addr in range(mem.INVENTORY_START, mem.INVENTORY_END + 1):
+            item_id = self.pyboy.memory[addr]
+            inventory.append(item_id)
+        return inventory
     
     def move_player(self, direction, steps=1, delay_frames=10):
         """Move the player in the specified direction with delay.
@@ -218,4 +262,4 @@ class ZeldaGameWrapper:
                f"Health: {self.get_health()}/{self.get_max_health()}\n" \
                f"Position: {self.get_player_position()}\n" \
                f"Direction: {self.get_player_direction_name()}\n" \
-               f"Enemies: {len(self.get_enemy_states())}"
+               f"Held Items: A={self.get_held_items()['item_a_name']}, B={self.get_held_items()['item_b_name']}"
