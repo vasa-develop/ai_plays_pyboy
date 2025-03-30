@@ -8,6 +8,7 @@ class ZeldaGameWrapper:
         self.pyboy = pyboy
         self.game_area_height = 144  # Screen height
         self.game_area_width = 160   # Screen width
+        self.last_direction_key = None  # Track last direction key pressed
         
         if self.pyboy.cartridge_title != "ZELDA":
             raise ValueError("This wrapper is for Zelda: Link's Awakening only")
@@ -27,13 +28,13 @@ class ZeldaGameWrapper:
         return (x, y)
     
     def get_player_direction(self):
-        """Get Link's facing direction.
+        """Get Link's facing direction with enhanced detection.
         
         Returns:
             int: Direction constant (3=UP, 2=RIGHT, 3=DOWN, 0=LEFT)
             
-        Note: Based on testing, UP and DOWN share the same value (3).
-        This means we can't distinguish between them using just the direction flag.
+        Note: UP and DOWN share the same value (3), so we use the last key press
+        to disambiguate between them when possible.
         """
         direction_flags = self.pyboy.memory[mem.LINK_DIRECTION_FLAGS]
         
@@ -42,7 +43,27 @@ class ZeldaGameWrapper:
         elif direction_flags == 2:
             return mem.DIRECTION_RIGHT
         else:
-            return mem.DIRECTION_UP  # Could be either UP or DOWN
+            if self.last_direction_key == 'up':
+                return mem.DIRECTION_UP
+            elif self.last_direction_key == 'down':
+                return mem.DIRECTION_DOWN
+            else:
+                return mem.DIRECTION_UP  # Default to UP if we can't disambiguate
+    
+    def get_player_direction_name(self):
+        """Get Link's facing direction as a string."""
+        direction = self.get_player_direction()
+        
+        if direction == mem.DIRECTION_UP:
+            return "UP"
+        elif direction == mem.DIRECTION_RIGHT:
+            return "RIGHT"
+        elif direction == mem.DIRECTION_DOWN:
+            return "DOWN"
+        elif direction == mem.DIRECTION_LEFT:
+            return "LEFT"
+        else:
+            return "UNKNOWN"
     
     def get_enemy_states(self):
         """Get states of enemies on screen."""
@@ -67,8 +88,8 @@ class ZeldaGameWrapper:
         """Get current game progress."""
         return self.pyboy.memory[mem.GAME_PROGRESS]
     
-    def move_player(self, direction, steps=1):
-        """Move the player in the specified direction.
+    def move_player(self, direction, steps=1, delay_frames=10):
+        """Move the player in the specified direction with delay.
         
         In Zelda: Link's Awakening, the first key press changes Link's facing direction,
         and subsequent presses in the same direction actually move the character.
@@ -76,6 +97,7 @@ class ZeldaGameWrapper:
         Args:
             direction: Direction to move ('up', 'down', 'left', 'right')
             steps: Number of steps to move in that direction
+            delay_frames: Number of frames to wait between key presses
         """
         button_mapping = {
             'up': WindowEvent.PRESS_ARROW_UP,
@@ -99,23 +121,35 @@ class ZeldaGameWrapper:
         }
         
         if direction in button_mapping:
+            self.last_direction_key = direction
+            
             current_direction = self.get_player_direction()
             target_direction = direction_values[direction]
             
             if current_direction != target_direction:
                 self.pyboy.send_input(button_mapping[direction])
-                self.pyboy.tick()
+                
+                for _ in range(delay_frames):
+                    self.pyboy.tick()
+                
                 self.pyboy.send_input(release_mapping[direction])
-                self.pyboy.tick()
+                
+                for _ in range(delay_frames):
+                    self.pyboy.tick()
             
             for _ in range(steps):
                 self.pyboy.send_input(button_mapping[direction])
-                self.pyboy.tick()
+                
+                for _ in range(delay_frames):
+                    self.pyboy.tick()
+                
                 self.pyboy.send_input(release_mapping[direction])
-                self.pyboy.tick()
+                
+                for _ in range(delay_frames):
+                    self.pyboy.tick()
     
-    def press_button(self, button, hold_frames=1):
-        """Press a game button."""
+    def press_button(self, button, hold_frames=10):
+        """Press a game button with configurable hold duration."""
         button_mapping = {
             'a': WindowEvent.PRESS_BUTTON_A,
             'b': WindowEvent.PRESS_BUTTON_B,
@@ -137,7 +171,9 @@ class ZeldaGameWrapper:
                 self.pyboy.tick()
             
             self.pyboy.send_input(release_mapping[button])
-            self.pyboy.tick()
+            
+            for _ in range(5):
+                self.pyboy.tick()
     
     def game_area(self):
         """Get the game area."""
@@ -161,5 +197,5 @@ class ZeldaGameWrapper:
         return f"Zelda Link's Awakening:\n" \
                f"Health: {self.get_health()}/{self.get_max_health()}\n" \
                f"Position: {self.get_player_position()}\n" \
-               f"Direction: {self.get_player_direction()}\n" \
+               f"Direction: {self.get_player_direction_name()}\n" \
                f"Enemies: {len(self.get_enemy_states())}"
