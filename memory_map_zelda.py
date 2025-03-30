@@ -5,10 +5,18 @@ This file documents the memory addresses identified through testing
 and analysis of the Zelda: Link's Awakening ROM.
 """
 
+LINK_X_POS = 0xC000  # Link's X position on screen (absolute)
+LINK_Y_POS = 0xC001  # Link's Y position on screen (absolute)
+LINK_SPRITE_X = 0xC008  # Link's sprite X position
+LINK_SPRITE_Y = 0xC009  # Link's sprite Y position
 
-LINK_X_POS = 0xC000  # Link's X position on screen
-LINK_Y_POS = 0xC001  # Link's Y position on screen
-LINK_DIRECTION = 0xC008  # Link's facing direction
+LINK_DIRECTION_FLAGS = 0xC00B  # Direction flags (32 for down/right, 0 for up/left)
+LINK_DIRECTION_FLAGS2 = 0xC00F  # Secondary direction flags (matches LINK_DIRECTION_FLAGS)
+
+DIRECTION_UP = 0
+DIRECTION_RIGHT = 1
+DIRECTION_DOWN = 2
+DIRECTION_LEFT = 3
 
 LINK_HEALTH = 0xC100  # Current health value
 LINK_MAX_HEALTH = 0xC104  # Maximum health value

@@ -27,8 +27,29 @@ class ZeldaGameWrapper:
         return (x, y)
     
     def get_player_direction(self):
-        """Get Link's facing direction."""
-        return self.pyboy.memory[mem.LINK_DIRECTION]
+        """Get Link's facing direction.
+        
+        Returns:
+            int: Direction constant (0=UP, 1=RIGHT, 2=DOWN, 3=LEFT)
+        """
+        direction_flags = self.pyboy.memory[mem.LINK_DIRECTION_FLAGS]
+        
+        if direction_flags == 0:
+            sprite_x = self.pyboy.memory[mem.LINK_SPRITE_X]
+            sprite_y = self.pyboy.memory[mem.LINK_SPRITE_Y]
+            
+            if sprite_x % 2 == 0:
+                return mem.DIRECTION_UP
+            else:
+                return mem.DIRECTION_LEFT
+        else:
+            sprite_x = self.pyboy.memory[mem.LINK_SPRITE_X]
+            sprite_y = self.pyboy.memory[mem.LINK_SPRITE_Y]
+            
+            if sprite_y % 2 == 0:
+                return mem.DIRECTION_RIGHT
+            else:
+                return mem.DIRECTION_DOWN
     
     def get_enemy_states(self):
         """Get states of enemies on screen."""
@@ -54,7 +75,15 @@ class ZeldaGameWrapper:
         return self.pyboy.memory[mem.GAME_PROGRESS]
     
     def move_player(self, direction, steps=1):
-        """Move the player in the specified direction."""
+        """Move the player in the specified direction.
+        
+        In Zelda: Link's Awakening, the first key press changes Link's facing direction,
+        and subsequent presses in the same direction actually move the character.
+        
+        Args:
+            direction: Direction to move ('up', 'down', 'left', 'right')
+            steps: Number of steps to move in that direction
+        """
         button_mapping = {
             'up': WindowEvent.PRESS_ARROW_UP,
             'down': WindowEvent.PRESS_ARROW_DOWN,
@@ -69,14 +98,28 @@ class ZeldaGameWrapper:
             'right': WindowEvent.RELEASE_ARROW_RIGHT
         }
         
+        direction_values = {
+            'up': mem.DIRECTION_UP,
+            'down': mem.DIRECTION_DOWN,
+            'left': mem.DIRECTION_LEFT,
+            'right': mem.DIRECTION_RIGHT
+        }
+        
         if direction in button_mapping:
-            self.pyboy.send_input(button_mapping[direction])
+            current_direction = self.get_player_direction()
+            target_direction = direction_values[direction]
             
-            for _ in range(steps):
+            if current_direction != target_direction:
+                self.pyboy.send_input(button_mapping[direction])
+                self.pyboy.tick()
+                self.pyboy.send_input(release_mapping[direction])
                 self.pyboy.tick()
             
-            self.pyboy.send_input(release_mapping[direction])
-            self.pyboy.tick()
+            for _ in range(steps):
+                self.pyboy.send_input(button_mapping[direction])
+                self.pyboy.tick()
+                self.pyboy.send_input(release_mapping[direction])
+                self.pyboy.tick()
     
     def press_button(self, button, hold_frames=1):
         """Press a game button."""
