@@ -10,13 +10,13 @@ LINK_Y_POS = 0xC001  # Link's Y position on screen (absolute)
 LINK_SPRITE_X = 0xC008  # Link's sprite X position
 LINK_SPRITE_Y = 0xC009  # Link's sprite Y position
 
-LINK_DIRECTION_FLAGS = 0xC00B  # Direction flags (32 for down/right, 0 for up/left)
-LINK_DIRECTION_FLAGS2 = 0xC00F  # Secondary direction flags (matches LINK_DIRECTION_FLAGS)
+LINK_DIRECTION_FLAGS = 0xC00B  # Direction flags
+LINK_DIRECTION_FLAGS2 = 0xC00F  # Secondary direction flags
 
-DIRECTION_UP = 0
-DIRECTION_RIGHT = 1
-DIRECTION_DOWN = 2
-DIRECTION_LEFT = 3
+DIRECTION_UP = 3    # Observed when pressing UP
+DIRECTION_RIGHT = 2 # Observed when pressing RIGHT
+DIRECTION_DOWN = 3  # Observed when pressing DOWN (same as UP)
+DIRECTION_LEFT = 0  # Observed when pressing LEFT
 
 LINK_HEALTH = 0xC100  # Current health value
 LINK_MAX_HEALTH = 0xC104  # Maximum health value

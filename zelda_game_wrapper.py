@@ -30,26 +30,19 @@ class ZeldaGameWrapper:
         """Get Link's facing direction.
         
         Returns:
-            int: Direction constant (0=UP, 1=RIGHT, 2=DOWN, 3=LEFT)
+            int: Direction constant (3=UP, 2=RIGHT, 3=DOWN, 0=LEFT)
+            
+        Note: Based on testing, UP and DOWN share the same value (3).
+        This means we can't distinguish between them using just the direction flag.
         """
         direction_flags = self.pyboy.memory[mem.LINK_DIRECTION_FLAGS]
         
         if direction_flags == 0:
-            sprite_x = self.pyboy.memory[mem.LINK_SPRITE_X]
-            sprite_y = self.pyboy.memory[mem.LINK_SPRITE_Y]
-            
-            if sprite_x % 2 == 0:
-                return mem.DIRECTION_UP
-            else:
-                return mem.DIRECTION_LEFT
+            return mem.DIRECTION_LEFT
+        elif direction_flags == 2:
+            return mem.DIRECTION_RIGHT
         else:
-            sprite_x = self.pyboy.memory[mem.LINK_SPRITE_X]
-            sprite_y = self.pyboy.memory[mem.LINK_SPRITE_Y]
-            
-            if sprite_y % 2 == 0:
-                return mem.DIRECTION_RIGHT
-            else:
-                return mem.DIRECTION_DOWN
+            return mem.DIRECTION_UP  # Could be either UP or DOWN
     
     def get_enemy_states(self):
         """Get states of enemies on screen."""
