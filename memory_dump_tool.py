@@ -84,10 +84,49 @@ def run_memory_dump_tool():
             pyboy.tick()
             
             key_pressed = None
-            for key, name in KEY_MAPPING.items():
-                if pyboy.get_input().get(key):
-                    key_pressed = name
-                    break
+            
+            if pyboy.frame_count % 60 == 0:
+                frame_key = (pyboy.frame_count // 60) % 8
+                if frame_key == 0:
+                    pyboy.send_input(WindowEvent.PRESS_ARROW_UP)
+                    key_pressed = "UP"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_ARROW_UP)
+                elif frame_key == 1:
+                    pyboy.send_input(WindowEvent.PRESS_ARROW_DOWN)
+                    key_pressed = "DOWN"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
+                elif frame_key == 2:
+                    pyboy.send_input(WindowEvent.PRESS_ARROW_LEFT)
+                    key_pressed = "LEFT"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_ARROW_LEFT)
+                elif frame_key == 3:
+                    pyboy.send_input(WindowEvent.PRESS_ARROW_RIGHT)
+                    key_pressed = "RIGHT"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_ARROW_RIGHT)
+                elif frame_key == 4:
+                    pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
+                    key_pressed = "A"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
+                elif frame_key == 5:
+                    pyboy.send_input(WindowEvent.PRESS_BUTTON_B)
+                    key_pressed = "B"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_B)
+                elif frame_key == 6:
+                    pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+                    key_pressed = "START"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+                elif frame_key == 7:
+                    pyboy.send_input(WindowEvent.PRESS_BUTTON_SELECT)
+                    key_pressed = "SELECT"
+                    pyboy.tick()
+                    pyboy.send_input(WindowEvent.RELEASE_BUTTON_SELECT)
             
             if key_pressed and (key_pressed != last_key or pyboy.frame_count - last_dump_frame > 30):
                 print(f"Key pressed: {key_pressed}, capturing memory dump...")
