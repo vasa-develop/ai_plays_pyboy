@@ -46,6 +46,14 @@ def monitor_memory_changes():
     
     print("\nWaiting 30 seconds for manual navigation through loading screens...")
     print("Please navigate through any loading screens during this time.")
+    print("Memory monitoring will start after the 30-second delay.")
+    
+    regions = [
+        (0xC000, 0xC100),  # Reverse-engineered player data
+        (0xD400, 0xD500),  # Destination coordinates and other data
+        (0xDB00, 0xDC00)   # Player stats, inventory, game state
+    ]
+    
     start_time = time.time()
     while time.time() - start_time < 30:
         pyboy.tick()
@@ -55,12 +63,6 @@ def monitor_memory_changes():
     
     print("\nStarting memory monitoring...")
     print("Play the game normally. Memory changes will be logged to the file.")
-    
-    regions = [
-        (0xC000, 0xC100),  # Reverse-engineered player data
-        (0xD400, 0xD500),  # Destination coordinates and other data
-        (0xDB00, 0xDC00)   # Player stats, inventory, game state
-    ]
     
     previous_memory = {}
     for start, end in regions:
