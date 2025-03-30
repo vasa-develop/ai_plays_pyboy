@@ -2,7 +2,7 @@ from pyboy.utils import WindowEvent
 import memory_map_zelda as mem
 
 class ZeldaGameWrapper:
-    """Game wrapper for Zelda: Link's Awakening."""
+    """Game wrapper for Zelda: Link's Awakening using official RAM map."""
     
     def __init__(self, pyboy):
         self.pyboy = pyboy
@@ -28,27 +28,12 @@ class ZeldaGameWrapper:
         return (x, y)
     
     def get_player_direction(self):
-        """Get Link's facing direction with enhanced detection.
+        """Get Link's facing direction using official memory address.
         
         Returns:
-            int: Direction constant (3=UP, 2=RIGHT, 3=DOWN, 0=LEFT)
-            
-        Note: UP and DOWN share the same value (3), so we use the last key press
-        to disambiguate between them when possible.
+            int: Direction constant (0=UP, 1=RIGHT, 2=DOWN, 3=LEFT)
         """
-        direction_flags = self.pyboy.memory[mem.LINK_DIRECTION_FLAGS]
-        
-        if direction_flags == 0:
-            return mem.DIRECTION_LEFT
-        elif direction_flags == 2:
-            return mem.DIRECTION_RIGHT
-        else:
-            if self.last_direction_key == 'up':
-                return mem.DIRECTION_UP
-            elif self.last_direction_key == 'down':
-                return mem.DIRECTION_DOWN
-            else:
-                return mem.DIRECTION_UP  # Default to UP if we can't disambiguate
+        return self.pyboy.memory[mem.LINK_DIRECTION]
     
     def get_player_direction_name(self):
         """Get Link's facing direction as a string."""
@@ -65,28 +50,63 @@ class ZeldaGameWrapper:
         else:
             return "UNKNOWN"
     
+    def get_player_animation_state(self):
+        """Get Link's animation state."""
+        return self.pyboy.memory[mem.LINK_ANIMATION_STATE]
+    
+    def get_rupees(self):
+        """Get Link's rupee count."""
+        low_byte = self.pyboy.memory[mem.LINK_RUPEES]
+        high_byte = self.pyboy.memory[mem.LINK_RUPEES_HIGH]
+        return (high_byte << 8) + low_byte
+    
+    def get_items(self):
+        """Get Link's inventory items."""
+        return {
+            "sword_level": self.pyboy.memory[mem.LINK_SWORD_LEVEL],
+            "shield_level": self.pyboy.memory[mem.LINK_SHIELD_LEVEL],
+            "bombs": self.pyboy.memory[mem.LINK_BOMBS],
+            "arrows": self.pyboy.memory[mem.LINK_ARROWS],
+            "magic_powder": self.pyboy.memory[mem.LINK_MAGIC_POWDER],
+            "selected_item_a": self.pyboy.memory[mem.LINK_SELECTED_ITEM_A],
+            "selected_item_b": self.pyboy.memory[mem.LINK_SELECTED_ITEM_B]
+        }
+    
+    def get_game_state(self):
+        """Get current game state."""
+        return {
+            "state": self.pyboy.memory[mem.GAME_STATE],
+            "substate": self.pyboy.memory[mem.GAME_SUBSTATE],
+            "room_id": self.pyboy.memory[mem.GAME_ROOM_ID],
+            "dungeon_id": self.pyboy.memory[mem.GAME_DUNGEON_ID]
+        }
+    
     def get_enemy_states(self):
         """Get states of enemies on screen."""
         enemies = []
-        for i in range(5):
-            base_addr = mem.ENEMY_STATE_START + (i * 16)  # Assuming 16 bytes per enemy
-            enemy_type = self.pyboy.memory[base_addr + 1]  # ENEMY_TYPE offset
+        enemy_count = self.pyboy.memory[mem.ENEMY_COUNT]
+        
+        for i in range(min(enemy_count, 5)):  # Limit to 5 enemies
+            base_addr = mem.ENEMY_STATE_START + (i * 16)  # 16 bytes per enemy
+            enemy_type = self.pyboy.memory[base_addr + (mem.ENEMY_TYPE - mem.ENEMY_STATE_START)]
             
             if enemy_type != 0:
                 enemy = {
                     'type': enemy_type,
-                    'behavior': self.pyboy.memory[base_addr + 2],  # ENEMY_BEHAVIOR offset
-                    'x': self.pyboy.memory[base_addr + 7],         # ENEMY_POSITION_X offset
-                    'y': self.pyboy.memory[base_addr + 8],         # ENEMY_POSITION_Y offset
-                    'state': self.pyboy.memory[base_addr + 9]      # ENEMY_STATE offset
+                    'health': self.pyboy.memory[base_addr + (mem.ENEMY_HEALTH - mem.ENEMY_STATE_START)],
+                    'x': self.pyboy.memory[base_addr + (mem.ENEMY_POSITION_X - mem.ENEMY_STATE_START)],
+                    'y': self.pyboy.memory[base_addr + (mem.ENEMY_POSITION_Y - mem.ENEMY_STATE_START)]
                 }
                 enemies.append(enemy)
         
         return enemies
     
     def get_game_progress(self):
-        """Get current game progress."""
-        return self.pyboy.memory[mem.GAME_PROGRESS]
+        """Get current game progress flags."""
+        progress_flags = []
+        for i in range(16):  # Read 16 bytes of progress flags
+            progress_flags.append(self.pyboy.memory[mem.GAME_PROGRESS_FLAGS + i])
+        return progress_flags
     
     def move_player(self, direction, steps=1, delay_frames=10):
         """Move the player in the specified direction with delay.
