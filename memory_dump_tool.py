@@ -76,6 +76,20 @@ def run_memory_dump_tool():
     post_title_dump = dump_memory(pyboy, "POST_TITLE")
     memory_dumps.append(post_title_dump)
     
+    print("\nWaiting 30 seconds for manual navigation through loading screens...")
+    print("Please navigate through any loading screens during this time.")
+    start_time = time.time()
+    while time.time() - start_time < 30:
+        pyboy.tick()
+        elapsed = int(time.time() - start_time)
+        if elapsed % 5 == 0 and elapsed > 0:
+            print(f"  {30 - elapsed} seconds remaining...")
+    
+    print("\nStarting automatic key presses now!")
+    
+    manual_nav_dump = dump_memory(pyboy, "AFTER_MANUAL_NAVIGATION")
+    memory_dumps.append(manual_nav_dump)
+    
     last_key = None
     last_dump_frame = 0
     
